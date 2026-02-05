@@ -1,1 +1,8 @@
+This Device works with all sorts of Raspbery pis but this code is originally for the Raspberry Pi Zero 2w created.
+Its functionating out of the boxwith this sorts of sensors: Max17048, DS18B20, Ebyte E220(LoRa), BMP 280
 
+Tutorial:
+  1.Install all Python Libarys:
+
+  
+            
