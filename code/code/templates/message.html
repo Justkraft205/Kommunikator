@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Messenger</title>
+  <style>
+    table {
+      border-collapse: collapse;
+      width: 60%;
+      margin: 40px auto;
+      font-family: Arial, sans-serif;
+    }
+    th, td {
+      border: 1px solid #aaa;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+  </style>
+</head>
+<body>
+  <a href="{{ url_for('index') }}">Zurück</a>
+  <a href="{{ url_for('new_kontakt') }}">Neuer Kontakt</a>
+  <h2>Messenger</h2>
+
+  <form method="POST" action="/send_message">
+    <!-- Dropdown -->
+    <select name="optionen">
+      {% for eintrag in optionen %}
+        <option value="{{ eintrag }}" {% if auswahl == eintrag %}selected{% endif %}>
+          {{ eintrag }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <!-- Eingabefeld für neuen Eintrag -->
+    <input type="text" name="neue_option" placeholder="Text">
+
+    <!-- Nur ein Button für alles -->
+    <button type="submit">Absenden</button>
+  </form>
+
+  {% if auswahl %}
+    <p>Ausgewählt: <strong>{{ auswahl }}</strong></p>
+  {% endif %}
+
+  <!-- Nachricht erscheint nur, wenn variable 'status' den Wert '404' hat -->
+  {% if status == "404" %}
+    <p style="color: red; font-weight: bold;">
+      Fehler. Beim Senden
+    </p>
+  {% endif %}
+
+  <!-- Platz für dynamische Server-Nachrichten -->
+  <div id="server-message" style="margin-top: 20px; color: blue; font-weight: bold;"></div>
+
+  <script>
+    async function checkServer() {
+      try {
+        const response = await fetch('/check_message');
+        if (!response.ok) throw new Error('Serverfehler');
+
+        const data = await response.json();
+
+        // Textnachricht aktualisieren
+        document.getElementById('server-message').innerText = data.nachricht;
+
+        // Tabelleninhalt aktualisieren
+        document.querySelector('table tbody').innerHTML = data.tabelle;
+
+      } catch (err) {
+        console.error('Fehler beim Abrufen:', err);
+      }
+    }
+
+    // Alle 5 Sekunden prüfen und Tabelle + Nachricht aktualisieren
+    setInterval(checkServer, 5000);
+
+    // Direkt beim Laden einmal prüfen
+    checkServer();
+  </script>
+
+  <!-- 🔽 Tabelle am Ende der Seite -->
+  <h3 style="text-align:center; margin-top:50px;">Gespeicherte Nachrichten</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Nachricht</th>
+        <th>Datum</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for name, nachricht, datum in zeilen %}
+      <tr>
+        <td>{{ name }}</td>
+        <td>{{ nachricht }}</td>
+        <td>{{ datum }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>
