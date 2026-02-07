@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Startseite</title>
+    <style>
+        .button-container {
+            margin: 20px;
+        }
+        .sos-button {
+            font-size: 24px;
+            padding: 15px 30px;
+            background-color: red;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .sos-button:hover {
+            background-color: darkred;
+        }
+        .status-label {
+            font-size: 20px;
+            margin-left: 20px;
+            color: green;
+        }
+        .wetter-button:hover {
+            background-color: blue;
+        }
+
+        .wetter-button {
+            font-size: 24px;
+            padding: 15px 30px;
+            background-color: lightblue;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .set-button:hover {
+            background-color: grey;
+        }
+        #menu {
+        text-align: center;
+        font-size: 3em;
+        height: 50px;
+        margin: 0;
+        }
+
+        #cord {
+  position: absolute;
+  top: 1px;      /* Abstand von oben */
+  left: 120px;     /* Abstand von links */
+  font-size: 1em;
+  margin: 0;
+}
+      #cord2 {
+  position: absolute;
+  top: 35px;      /* Abstand von oben */
+  left: 120px;     /* Abstand von links */
+  font-size: 1em;
+  margin: 0;
+}
+
+
+        .set-button {
+            font-size: 24px;
+            padding: 15px 30px;
+            background-color: lightgrey;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+    #clock {
+      font-size: 2em;
+      border: 3px solid #0f0;
+      padding: 3px 5px;
+      width: 130px;
+      border-radius: 10px;
+    }
+#kopfzeile {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  position: relative;
+  background-color: #f9f9f9;
+}
+
+/* Dropdown-Menü */
+.dropdown {
+  position: relative;
+}
+
+.dropdown-button {
+  background-color: #40eb07;
+  color: white;
+  padding: 10px 20px;
+  font-size: 20px;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  background-color: white;
+  min-width: 160px;
+  box-shadow: 0px 8px 16px rgba(0,0,0,0.2);
+  z-index: 1;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.dropdown-content a {
+  color: black;
+  padding: 12px 16px;
+  text-decoration: none;
+  display: block;
+}
+
+.dropdown-content a:hover {
+  background-color: #f1f1f1;
+}
+
+.dropdown:hover .dropdown-content {
+  display: block;
+}
+
+/* WLAN + Akku rechtsbündig */
+.right-icons {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-left: auto; /* rechts ausrichten */
+}
+
+/* Koordinatenblock */
+.cords {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 14px;
+}
+
+#cord, #cord2 {
+  margin: 0;
+}
+
+
+/* WLAN-Anzeige */
+.wifi-icon {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 30px;
+}
+
+.bar {
+  width: 5px;
+  background-color: gray;
+  opacity: 0.2;
+  transition: opacity 0.3s, background-color 0.3s;
+}
+
+.bar1 { height: 6px; }
+.bar2 { height: 12px; }
+.bar3 { height: 18px; }
+.bar4 { height: 24px; }
+
+.bar.active {
+  background-color: limegreen;
+  opacity: 1;
+}
+
+/* Akku-Anzeige */
+.battery-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.battery-icon {
+  width: 50px;
+  height: 20px;
+  border: 2px solid #333;
+  position: relative;
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+
+.battery-icon::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  top: 4px;
+  width: 4px;
+  height: 12px;
+  background: #333;
+  border-radius: 1px;
+}
+
+.battery-level {
+  height: 100%;
+  background-color: limegreen;
+  transition: width 0.3s;
+}
+
+.battery-text {
+  font-size: 16px;
+}
+
+/* Balken unter Kopfzeile */
+.balken {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  background-color: lime;
+  margin-top: 5px;
+}
+
+/* Koordinatenanzeige */
+#cord, #cord2 {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 30px;
+}
+
+/* Knöpfe */
+.button-container {
+  margin: 20px;
+}
+
+.sos-button,
+.set-button,
+.wetter-button {
+  font-size: 24px;
+  padding: 15px 30px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  color: white;
+  transition: background-color 0.3s;
+}
+
+.sos-button {
+  background-color: red;
+}
+
+.sos-button:hover {
+  background-color: darkred;
+}
+
+.set-button {
+  background-color: lightgrey;
+}
+
+.set-button:hover {
+  background-color: grey;
+}
+
+.wetter-button {
+  background-color: lightblue;
+}
+
+.wetter-button:hover {
+  background-color: blue;
+}
+
+/* Statusanzeige */
+.status-label {
+  font-size: 20px;
+  margin-left: 20px;
+  color: green;
+}
+
+/* Digitale Uhr */
+#clock {
+  font-size: 2em;
+  border: 3px solid #0f0;
+  padding: 5px 10px;
+  width: 130px;
+  border-radius: 10px;
+  margin: 10px auto;
+  text-align: center;
+}
+          #upcl {
+    color: white;            /* Schrift weiß */
+    border: none;            /* ohne Rahmen */
+    padding: 10px 20px;      /* etwas Abstand innen */
+    border-radius: 5px;      /* abgerundete Ecken */
+    cursor: pointer;         /* Hand-Cursor */
+  }
+
+  #upcl:hover {
+    background-color: green; /* dunkleres Rot beim Hover */
+  }
+
+    </style>
+</head>
+<body>
+<a href="{{ url_for('check_position') }}">Update-Clock</a>
+<div id="kopfzeile">
+  <div class="dropdown">
+    <button class="dropdown-button">Menü</button>
+    <div class="dropdown-content">
+        <a href="{{ url_for('wetter') }}">Wetter</a>
+        <a href="{{ url_for('mesange') }}">Messanger</a>
+        <a href="{{ url_for('sensoren') }}">Sensoren</a>
+      <a href="{{ url_for('settings') }}">Einstellungen</a>
+    </div>
+  </div>
+
+
+  <div class="right-icons">
+  <div class="cords">
+    <h2 id="cord">Long:{{ text }}</h2>
+    <h2 id="cord2">Lat:{{ text2 }}</h2>
+      <h2 id="height">Höhe:{{ height }}</h2>
+  </div>
+
+  <div class="wifi-icon">
+    <div class="bar bar1"></div>
+    <div class="bar bar2"></div>
+    <div class="bar bar3"></div>
+    <div class="bar bar4"></div>
+  </div>
+
+  <div class="battery-container">
+    <div class="battery-icon">
+      <div class="battery-level" style="width: {{ battery_level }}%;"></div>
+    </div>
+    <span class="battery-text">{{ battery_level }}%</span>
+  </div>
+</div>
+
+    </div>
+    <div class="balken"></div>
+
+
+<div id="clock">
+  <span id="uhr"></span>
+  <br>
+  <span id="date"></span>
+</div>
+   <p style="color: red; font-weight: bold;">Status: {{ status }}</p>
+
+<script>
+    // --- Uhr aktualisieren ---
+    let aktuelleZeit = new Date("{{ startzeit_js }}");
+    function updateUhr() {
+        aktuelleZeit.setSeconds(aktuelleZeit.getSeconds() + 1);
+        document.getElementById("uhr").textContent =
+            aktuelleZeit.toLocaleTimeString("de-DE", { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        document.getElementById("date").textContent =
+            aktuelleZeit.toLocaleDateString("de-DE", { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+    updateUhr();
+    setInterval(updateUhr, 1000);
+
+    // --- Wifi Strength setzen ---
+    function setWifiStrength(level) {
+      const bars = document.querySelectorAll('.wifi-icon .bar');
+      bars.forEach((bar, index) => {
+        if (index < level) bar.classList.add('active');
+        else bar.classList.remove('active');
+      });
+    }
+    setWifiStrength({{ strength }});
+
+    // --- Button Klick Event ---
+    const btn = document.getElementById("upcl");
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await fetch("/upcl", { method: "POST" });
+        console.log("Clock update sent!");
+      } catch(e) {
+        console.error("Fehler beim Senden:", e);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // --- Status Polling ---
+    async function checkStatus() {
+      try {
+        let response = await fetch("/status");
+        let data = await response.json();
+
+        if (data.status === "404") {
+          btn.style.backgroundColor = "red";
+          btn.style.color = "white";
+        } else {
+          btn.style.backgroundColor = "";
+          btn.style.color = "";
+        }
+      } catch (e) {
+        console.error("Fehler beim Status-Abfragen:", e);
+      }
+    }
+
+    checkStatus(); // einmal beim Start
+    setInterval(checkStatus, 5000);
+</script>
+
+<script>
+    let aktuelleZeit = new Date("{{ startzeit_js }}");
+
+    function updateUhr() {
+        aktuelleZeit.setSeconds(aktuelleZeit.getSeconds() + 1);
+
+        // Uhrzeit setzen
+        document.getElementById("uhr").textContent =
+            aktuelleZeit.toLocaleTimeString("de-DE", {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+        // Datum setzen
+        document.getElementById("date").textContent =
+            aktuelleZeit.toLocaleDateString("de-DE", {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+    }
+
+    updateUhr(); // direkt beim Laden einmal setzen
+    setInterval(updateUhr, 1000);
+</script>
+<script>
+function setWifiStrength(level) {
+  const bars = document.querySelectorAll('.wifi-icon .bar');
+  bars.forEach((bar, index) => {
+    if (index < level) {
+      bar.classList.add('active');
+    } else {
+      bar.classList.remove('active');
+    }
+  });
+}
+</script>
+
+<script>
+  setWifiStrength({{ strength }});
+</script>
+<div id="toast-container"></div>
+
+<script>
+  async function checkForUpdates() {
+    try {
+      const res = await fetch('/check-updates');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      // Wenn neue Nachricht vorhanden ist, Toast anzeigen
+      if (data.notify) {
+        const container = document.getElementById('toast-container');
+        container.innerHTML = `
+          <div id="toast"
+               style="
+                 position: fixed; top: 20px; right: 20px;
+                 background: #4CAF50; color: white; padding: 15px;
+                 border-radius: 8px; font-weight: bold;
+                 box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+               ">
+            Neue Nachricht von ${data.device}
+          </div>
+        `;
+
+        // Nach 3 Sekunden wieder ausblenden und Rückmeldung senden
+        setTimeout(() => {
+          const toast = document.getElementById('toast');
+          if (toast) {
+            toast.style.display = 'none';
+            fetch('/notify-closed', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                device: data.device,
+                closed_at: new Date().toISOString()
+              })
+            });
+          }
+        }, 3000);
+      }
+    } catch (err) {
+      console.error('Fehler beim Abrufen der Updates:', err);
+    }
+  }
+
+  // Alle 5 Sekunden Updates prüfen
+  setInterval(checkForUpdates, 5000);
+
+  // Direkt beim Laden einmal ausführen
+  checkForUpdates();
+</script>
+</body>
+</html>
