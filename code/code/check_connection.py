@@ -1,6 +1,7 @@
 #-*- coding: latin-1 -*-
 import time, ast, os, pytz, csv, app, shared, json, board, busio, smbus2, adafruit_max1704x, glob, csv
 from adafruit_bme280 import basic as adafruit_bme280
+from multiprocessing import Process, Event
 from lora_e220 import LoRaE220, TransmissionPower
 from lora_e220_operation_constant import ResponseStatusCode
 import RPi.GPIO as GPIO
@@ -11,6 +12,8 @@ emp_id = ""
 temperature = None
 humidity = None
 pressure = None
+logger = None
+stop_event = None
 altitude = None
 celsius = True
 base_dir = '/sys/bus/w1/devices/'
@@ -289,9 +292,9 @@ def manager(count,id2,text):
         print(f"id:{id2}, text:{text}")
         print(datetime.now())
         for i in range(2):
-            if count == 1:senden(shared.ser, id2, text)
+            if count == 1:senden(id2, text)
             elif count == 2:
-                message, server_id = empfange_nachricht(shared.ser, shared.myid)
+                message, server_id = empfange_nachricht(shared.myid)
                 print(datetime.now())
                 print(f"Nachricht Empfangem.Message: {message},server_id:{server_id}")
                 return message, server_id
@@ -301,21 +304,16 @@ def manager(count,id2,text):
 
 def change_frequenz(channel):
     shared.manager_check = 2
-    print("Ändere Frequenz")
     channel = int(channel)
     status, configuration = shared.lora.get_configuration()
-    new_channel = channel  # 850.125 + 18 = 868.125 MHz (Europa)
-    configuration.CHAN = new_channel
+    if not status == 1: return False
+    configuration.CHAN = channel
     status, confSet = shared.lora.set_configuration(configuration)
-    if not status == 1:
-        print("Fehler beim setzen der Konfiguration")
-    print(f"\n??  Setze neue Frequenz auf Kanal {new_channel} ({850.125 + new_channel} MHz)...")
+    if not status == 1:return False
+    print(f"\n??  Setze neue Frequenz auf Kanal {channel} ({850.125 + channel} MHz)...")
     time.sleep(1)
     status, conf2 = shared.lora.get_configuration()
-    if not status == 1:
-        print("? Fehler beim erneuten Lesen")
-    print("\n?? Aktuelle Konfiguration nach nderung:")
-    print(conf2)
+    if not status == 1: return False
     print(f"CHAN: {conf2.CHAN}")
     if conf2.CHAN == channel:
         shared.current_freq = int(channel)
@@ -324,71 +322,80 @@ def change_frequenz(channel):
     else:return False
 
 def change_power(power_dbm):
+    val = 99
+    shared.manager_check = 2
     print(f"?? Ändere Sendeleistung auf {power_dbm} dBm")
     if power_dbm == "22": val = 0
     elif power_dbm == "17": val = 1
     elif power_dbm == "13": val = 2
     elif power_dbm == "10": val = 3
-    print(f"Sendeleistung: {val}")
+    else:return False
     status, conf = shared.lora.get_configuration()
-    if status != 1:
-        print("Fehler beim Lesen der Konfiguration")
-        return False
+    if status != 1:return False
     conf.OPTION.transmissionPower = val
     status, _ = shared.lora.set_configuration(conf)
-    if status != 1:
-        print("Fehler beim Setzen")
-        return False
+    if status != 1:return False
     time.sleep(1)
     status, conf2 = shared.lora.get_configuration()
-    if status != 1:
-        print("Fehler beim erneuten Lesen")
-        return False
-    print(f"Aktuelle Power: {conf2.OPTION.transmissionPower} (Index)")
+    if status != 1:return False
     if conf2.OPTION.transmissionPower == val:
-        print(power_dbm)
         shared.current_power = int(power_dbm)
+        shared.manager_check = 0
+        print(f"Erfolgreich gesetzt auf:{conf2.OPTION.transmissionPower}")
         return True
-    else:
-        return False
+    else:return False
 
 #-----------------------Angeschlossene Sensoren-------------------------------------------------------------------------
 
 def check_sensoren():
-    sensors = [
-        ["BMP", 0x76],
-        ["MAX17048", 0x36]
-    ]
     print("Es werden angeschlossene Sensoren geprüft")
-    if check_one_wire():
-        print("Hat geklappt")
-    bus = restart_i2c(1)
-    check_i2c_devices(sensors)
-    read_sensors()
+    if not check_one_wire(): shared.temp_c = 0
+    if not restart_i2c(1): return False, False, False
+    check_i2c_devices(shared.sensors)
+    if shared.logger_service:
+        sensor = read_sensors()
+        return sensor
+    else:
+        read_sensors()
 
 
 def read_sensors():
     global temperature, humidity, pressure, altitude
     if "BME280" in shared.SENSOREN:
-        temperature = round(shared.bme280.temperature, 1)
-        humidity = round(shared.bme280.humidity, 1)
-        pressure = round(shared.bme280.pressure, 1)
-        altitude = round(shared.bme280.altitude, 1)
-        shared.sensor_data["Temperatur"] = f"{temperature} °C"
-        shared.sensor_data["Luftfeuchtigkeit"] =f"{humidity} %"
-        shared.sensor_data["Luftdruck"] = f"{pressure} hPa"
-        shared.sensor_data["Altitude"] = f"{altitude} meters"
-        print("Daten der Sensoren werden gelesen")
-        print("Temperature: %0.1f C" % temperature)
-        print("Humidity: %0.1f %%" % humidity)
-        print("absolute Pressure: %0.1f hPa" % pressure)
-        print("Altitude = %0.2f meters" % altitude)
+        if shared.logger_service:
+            shared.sensor_data.update({
+                "Luftfeuchtigkeit": f"{round(shared.bme280.humidity, 1)} %",
+                "Luftdruck": f"{round(shared.bme280.pressure, 1)} hPa",
+                "Temperatur": f"{round(shared.bme280.temperature, 1)} °C"
+            })
+            return shared.sensor_data
+        else:
+
+            temperature = round(shared.bme280.temperature, 1)
+            humidity = round(shared.bme280.humidity, 1)
+            pressure = round(shared.bme280.pressure, 1)
+            altitude = round(shared.bme280.altitude, 1)
+            if not shared.celsius: shared.sensor_data["Temperatur"] = f"{(temperature * 9/5) + 32:.2f} °F"
+            else: shared.sensor_data["Temperatur"] = f"{temperature} °C"
+            shared.sensor_data["Luftfeuchtigkeit"] =f"{humidity} %"
+            shared.sensor_data["Luftdruck"] = f"{pressure} hPa"
+            shared.sensor_data["Altitude"] = f"{altitude} meters"
+            print("Daten der Sensoren werden gelesen")
+            print("Temperature: %0.1f C" % temperature)
+            print("Humidity: %0.1f %%" % humidity)
+            print("absolute Pressure: %0.1f hPa" % pressure)
+            print("Altitude = %0.2f meters" % altitude)
+            print(shared.sensor_data)
     temp_c = round(shared.temp_c, 1)
-    shared.sensor_data["Temp_one"] = f"{temp_c} C"
+    if shared.temp_c != 0:
+        if shared.celsius:
+            shared.sensor_data["Temp_one"] = f"{temp_c} °C"
+        else:
+            shared.sensor_data["Temp_one"] = f"{(temp_c * 9/5) + 32:.2f} °F"
     shared.time_data = datetime.now().strftime("%H:%M")
 
 def check_i2c_devices(sensor_list, bus_id=1):
-    shared.i2c = board.I2C()  # SCL, SDA
+    shared.i2c = board.I2C()
     print("? I²C-Geräte-Check:")
     for name, address in sensor_list:
         try:
@@ -403,20 +410,15 @@ def check_i2c_devices(sensor_list, bus_id=1):
                 shared.SENSOREN.append("BME280")
         except OSError:
             print(f"{name} antwortet NICHT auf Adresse {hex(address)}")
-            if address == 0x36:
-                shared.battery_level = -10
+            if address == 0x36: shared.battery_level = -10
 
 def restart_i2c(bus_id=1):
-    """I²C-Bus sauber schließen und neu öffnen"""
     try:
         shared.bus.close()
         time.sleep(0.5)
         shared.bus = smbus2.SMBus(bus_id)
-        print("? I²C-Bus wurde neu gestartet.")
-        return shared.bus
-    except Exception as e:
-        print("?? Fehler beim Neustart:", e)
-        return None
+        return True
+    except Exception as e: return False
 
 def check_one_wire():
     device_folders = glob.glob(base_dir + '28-*')
@@ -455,20 +457,49 @@ def read_temp():
         temp_f = temp_c * 9.0 / 5.0 + 32.0
         return temp_c, temp_f
 
+def logger_service(minuten):
+    global logger, stop_event
+    print("Startet/stoppt den sensor logger")
+    print(f"Wiederholzeit: {minuten}")
+    if shared.logger_service:
+        print("logger service beenden")
+        shared.logger_service = False
+        stop_event.set()  # Signal zum Beenden
+        logger.join()
+        print("beendet")
+    else:
+        shared.logger_service = True
+        stop_event = Event()
+        logger = Process(target=sensor_logger, args=(minuten,stop_event,))
+        logger.start()
 
-def sensor_logger():
-    print("Sensor daten werden gelockt")
+
+def sensor_logger(minuten, stop_event):
+    print("Sensor logger start")
+    seconds = int(minuten) * 60
     daten = [
         ["Luftdruck", "Temperature", "Luftfeuchte"]]
     with open("daten.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, delimiter=";")  # Semikolon als Trenner (in Deutschland üblich)
         writer.writerows(daten)
-    while True:
-        check_sensoren()
-        daten =[shared.bme280.pressure, shared.bme280.temperature, shared.bme280.humidity]
-        with open("daten.csv", "a", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f, delimiter=";")
-            writer.writerow(daten)
-        time.sleep(160)
+    t_count = 0
+    while not stop_event.is_set():
+        if t_count >= seconds:
+            print("Speichern")
+            sensor = check_sensoren()
+            if isinstance(sensor, dict):
+                values = [sensor.get("Luftdruck"), sensor.get("Temperatur"), sensor.get("Luftfeuchtigkeit"), datetime.now().strftime("%H:%M")]
+            else:
+                # Fallback, falls Tuple oder Liste
+                values = list(sensor)
+
+            with open("daten.csv", "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f, delimiter=";")
+                writer.writerow(values)
+            print("wurde gespeichert")
+            print(sensor)
+            t_count = 0
+        time.sleep(10)
+        t_count += 10
 
 
