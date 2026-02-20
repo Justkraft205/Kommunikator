@@ -2,6 +2,7 @@
 import shared, threading, check_connection, time, serial, json, ast, logging, csv, smbus2, board, adafruit_max1704x, pytz, os, glob
 from flask import Flask, render_template, request, redirect, url_for, jsonify,render_template_string
 from gpiozero import Buzzer, OutputDevice
+from multiprocessing import Process
 from mpmath.libmp.libmpf import strict_normalize1
 from lora_e220 import LoRaE220
 from lora_e220_operation_constant import ResponseStatusCode
@@ -14,9 +15,7 @@ import RPi.GPIO as GPIO
 #Variables--------------------------------------------------------------------------------------------------------------
 message_path = "nachrichten.json"
 base_dir = '/sys/bus/w1/devices/'
-#celsius = True
 DATEI = "nachrichten.json"
-celsius = True
 app = Flask(__name__)
 #------------------------------Rendering--------------------------------------------------------------------------------
 @app.route('/')
@@ -29,16 +28,13 @@ def index():
 def new_kontakt():return render_template('new_kontakt.html')
 
 @app.route('/settings')
-def settings():
-    print(shared.current_power)
-    return render_template('settings.html',freq = shared.current_freq, power=shared.current_power)
+def settings(): return render_template('settings.html',freq = shared.current_freq, power=shared.current_power)
 
 @app.route('/check_position')
 def check_position():return render_template('cords.html')
 
 @app.route('/wetter')
-def wetter():
-    return render_template("wetter.html",wetterdaten=shared.wetterdaten,startzeit_js=datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),status=shared.fehler,state=shared.state)
+def wetter(): return render_template("wetter.html",wetterdaten=shared.wetterdaten,startzeit_js=datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),status=shared.fehler,state=shared.state)
 
 @app.route("/mesange", methods=["GET", "POST"])
 def mesange():
@@ -49,8 +45,7 @@ def mesange():
     return render_template("message.html",optionen=shared.optionen,auswahl=auswahl,status=shared.fehler,wert=wert,nachrichten=nachrichten,zeilen=zeilen)
 
 @app.route('/sensoren')
-def sensoren():
-    return render_template('sensor.html', sensor_data=shared.sensor_data, datatime = shared.time_data)
+def sensoren(): return render_template('sensor.html', sensor_data=shared.sensor_data, datatime = shared.time_data, logger_active=shared.logger_service )
 
 #Routen-----------------------------------------------------------------------------------------------------------------
 @app.route('/check_message')
@@ -90,30 +85,36 @@ def set_frequenz():
     if not state:
         auswahl = "Fehler beim Schreiben"
         return f"<h2><em>{auswahl}</em></h2><a href='/'>Zurück</a>"
-    else:
-        auswahl = int(request.form["auswahl"])
-        return redirect(url_for('settings'))
+    else: return redirect(url_for('settings'))
 
 @app.route('/set_strengh', methods=['POST'])
 def set_strengh():
     strengh = request.form.get('strengh')
-    if not strengh:
-        return "Keine Auswahl getroffen!", 400
+    if not strengh: return "Keine Auswahl getroffen!", 400
     else:
         state = change_power(strengh)
         if not state:
             strengh = "Fehler beim Schreiben"
             return f"<h2><em>{strengh}</em></h2><a href='/'>Zurück</a>"
-        else:
-            strengh = int(request.form["strengh"])
-            return redirect(url_for('settings'))
+        else: return redirect(url_for('settings'))
 
+@app.route('/set_temp', methods=['POST'])
+def set_temp():
+    einheit = request.form.get('tep')
+    if not einheit:
+        return "Keine Auswahl getroffen!", 400
+    else:
+        if einheit == "0":
+            shared.celsius = True
+            return redirect(url_for('settings'))
+        else:
+            shared.celsius = False
+            return redirect(url_for('settings'))
 
 @app.route('/check_sensors2')
 def check_sensors2():
     check_sensors()
     return 200
-
 
 @app.route('/save-location', methods=['POST'])
 def save_location():
@@ -151,7 +152,6 @@ def check_sensors():
     check_sensoren()
     return jsonify({'status': 'ok'})
 
-
 @app.route('/submit', methods=['POST'])
 def submit():
     name = request.form.get('feld1')
@@ -183,6 +183,13 @@ def lade(datei):
         with open(datei, "r", encoding="utf-8") as fe:
             return json.load(fe)
     return {}
+
+@app.route("/st_logger", methods=["POST"])
+def st_logger():
+    minuten = request.form.get("minuten")  # liest den Sliderwert
+    print("Empfangene Minuten:", minuten)
+    logger_service(minuten)
+    return redirect(url_for('sensoren'))
 
 @app.route("/send_message", methods=["POST"])
 def send_message():
@@ -220,6 +227,8 @@ def request_kontakt():
         return jsonify({"ergebnis": result, "eingabe": text})
     return render_template("quest_kontakt.html")
 
+#Initalisierung und main Thread-----------------------------------------------------------------------------------------
+
 def check_battery():
     voltage = round(shared.max17048.cell_voltage, 2)
     shared.battery_level = round(shared.max17048.cell_percent, 1)
@@ -227,7 +236,8 @@ def check_battery():
     if shared.battery_level == 0.0:
         print(f"Spannung: {shared.battery_level:.1f} %")
     elif shared.battery_level < 5:
-        os.system("sudo shutdown -h now")
+        print("to low battery please shutdown")
+        #os.system("sudo shutdown -h now")
 
 def e220_check(port="/dev/serial0", baudrate=9600):
     try:
@@ -236,6 +246,7 @@ def e220_check(port="/dev/serial0", baudrate=9600):
         ser.write(bytes([0xC1, 0x80, 0x07]))
         time.sleep(0.1)
         antwort = ser.read(10)
+        print(antwort)
         ser.close()
         if b"\xc1\x80\x07\x00\x00\x10\x16\x0b\x00\x00" in antwort:
             return True
@@ -253,6 +264,7 @@ def check_max17048(addr, bus):
     except OSError:
         return False
 
+
 def init_hardware():
     global buzzer, powerp
     try:
@@ -263,10 +275,10 @@ def init_hardware():
     try:
         powerp = OutputDevice(13)
     except Exception as e:
-        print(f"Buzzer konnte nicht initialisiert werden: {e}")
-        buzzer = None
-    powerp.on()
+        print(f"Power konnte nicht initialisiert werden: {e}")
+        powerp = None
     print("Power wurde angeschaltet")
+    powerp.on()
     i2c_bus = 1
     device_adress = 0x36
     shared.bus = smbus2.SMBus(i2c_bus)
@@ -290,7 +302,7 @@ def init_hardware():
         GPIO.output(shared.M1_PIN, GPIO.LOW)
         time.sleep(0.1)
         shared.ser = serial.Serial(port='/dev/serial0', baudrate=9600, timeout=1)
-        shared.lora = LoRaE220('400T22D', shared.ser, aux_pin=shared.aux_pin, m0_pin=shared.M0_PIN, m1_pin=shared.M1_PIN)
+        shared.lora = LoRaE220('900T22D', shared.ser, aux_pin=shared.aux_pin, m0_pin=shared.M0_PIN, m1_pin=shared.M1_PIN)
         time.sleep(1)
         code = shared.lora.begin()
         if code == 1:
@@ -306,7 +318,7 @@ def manager2():
         if shared.manager_check == 0:
             count = count + 1
             print(count)
-            message, server_id = empfang_normal(shared.ser, shared.myid)
+            message, server_id = empfang_normal(shared.myid)
             print(f"mes:{message}, ser:{server_id}, manager2")
             if not message == "404" or None:
                 print("wird aufgerufen")
@@ -326,7 +338,6 @@ def sound():
     print("Sound")
     time.sleep(1)
     buzzer.off()
-    time.sleep(1)
 
 if __name__ == '__main__':
     shared.ser = init_hardware()
@@ -334,7 +345,8 @@ if __name__ == '__main__':
     if  shared.ser == "404":
         print("Fehler")
         shared.fehler += "Funksystem konnte nicht gestartet werden, Funk deaktiviert"
-    else:threading.Thread(target=manager2, daemon=False).start()
+    else:
+        threading.Thread(target=manager2, daemon=False).start()
     if os.path.exists('kontakt.csv'):
          with open("kontakt.csv", "r", encoding="utf-8") as f: shared.kontakte = list(csv.reader(f))
          print(shared.kontakte)
