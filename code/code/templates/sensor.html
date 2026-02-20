@@ -110,5 +110,38 @@
             }
         });
     </script>
+{% if not logger_active %}
+<form id="volumeForm" method="POST" action="/st_logger">
+    <label for="demorange">Minuten: <span id="volValue">2</span></label>
+    <input id="demorange" name="minuten" type="range" min="1" max="30" step="1" value="2">
+    <button type="submit">Senden</button>
+</form>
+
+<script>
+const slider = document.querySelector("#demorange");
+const output = document.querySelector("#volValue");
+slider.addEventListener("input", function () {
+    output.textContent = this.value;
+});
+</script>
+
+{% else %}
+<form id="stopForm" method="POST" action="/st_logger" style="text-align:center; margin-top:20px;">
+    <!-- Dummy-Wert vom Slider -->
+    <input type="hidden" name="minuten" value="0">
+
+    <button type="submit" style="
+        background-color: #d9534f;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 1em;
+        transition: background-color 0.3s;
+    ">🛑 Stop Logger</button>
+</form>
+{% endif %}
+
 </body>
 </html>
