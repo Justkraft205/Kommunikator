@@ -22,6 +22,7 @@ app = Flask(__name__)
 @app.route('/index')
 def index():
     clock = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    shared.logger_data = False
     return render_template('index.html',status=shared.fehler,height = shared.hoehe,text=shared.long,strength=shared.setWifiStrength,text2=shared.lat,startzeit_js=clock,battery_level=shared.battery_level,notify = shared.notify,device =shared.send)
 
 @app.route('/new_kontakt')
@@ -45,7 +46,15 @@ def mesange():
     return render_template("message.html",optionen=shared.optionen,auswahl=auswahl,status=shared.fehler,wert=wert,nachrichten=nachrichten,zeilen=zeilen)
 
 @app.route('/sensoren')
-def sensoren(): return render_template('sensor.html', sensor_data=shared.sensor_data, datatime = shared.time_data, logger_active=shared.logger_service )
+def sensoren():
+    if shared.logger_data:
+        with open(shared.last_file, newline='', encoding='utf-8') as csvfile:
+            reader = csv.reader(csvfile, delimiter=';')
+            data = list(reader)
+        return render_template('sensor.html', sensor_data=shared.sensor_data, datatime=shared.time_data,
+                               logger_active=shared.logger_service, logger_data_check=shared.logger_data, data = data)
+    else:return render_template('sensor.html', sensor_data=shared.sensor_data, datatime=shared.time_data,
+                               logger_active=shared.logger_service, logger_data_check=shared.logger_data)
 
 #Routen-----------------------------------------------------------------------------------------------------------------
 @app.route('/check_message')
@@ -86,6 +95,11 @@ def set_frequenz():
         auswahl = "Fehler beim Schreiben"
         return f"<h2><em>{auswahl}</em></h2><a href='/'>Zurück</a>"
     else: return redirect(url_for('settings'))
+
+@app.route('/show_data')
+def show_data():
+    shared.logger_data = True
+    return redirect(url_for('sensoren'))
 
 @app.route('/set_strengh', methods=['POST'])
 def set_strengh():
@@ -187,8 +201,11 @@ def lade(datei):
 @app.route("/st_logger", methods=["POST"])
 def st_logger():
     minuten = request.form.get("minuten")  # liest den Sliderwert
+    file_name = request.form.get("file_name")
+    file_name= str(file_name) + ".csv"
+    shared.last_file = file_name
     print("Empfangene Minuten:", minuten)
-    logger_service(minuten)
+    logger_service(minuten, file_name)
     return redirect(url_for('sensoren'))
 
 @app.route("/send_message", methods=["POST"])
