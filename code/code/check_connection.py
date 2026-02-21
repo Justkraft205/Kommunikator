@@ -457,7 +457,7 @@ def read_temp():
         temp_f = temp_c * 9.0 / 5.0 + 32.0
         return temp_c, temp_f
 
-def logger_service(minuten):
+def logger_service(minuten, file_name):
     global logger, stop_event
     print("Startet/stoppt den sensor logger")
     print(f"Wiederholzeit: {minuten}")
@@ -470,17 +470,16 @@ def logger_service(minuten):
     else:
         shared.logger_service = True
         stop_event = Event()
-        logger = Process(target=sensor_logger, args=(minuten,stop_event,))
+        logger = Process(target=sensor_logger, args=(minuten,stop_event,file_name))
         logger.start()
 
 
-def sensor_logger(minuten, stop_event):
+def sensor_logger(minuten, stop_event, file_name):
     print("Sensor logger start")
     seconds = int(minuten) * 60
-    daten = [
-        ["Luftdruck", "Temperature", "Luftfeuchte"]]
-    with open("daten.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f, delimiter=";")  # Semikolon als Trenner (in Deutschland üblich)
+    daten = [["Luftdruck", "Temperature", "Luftfeuchte", "Uhrzeit"]]
+    with open(file_name, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f, delimiter=";")
         writer.writerows(daten)
     t_count = 0
     while not stop_event.is_set():
@@ -493,7 +492,7 @@ def sensor_logger(minuten, stop_event):
                 # Fallback, falls Tuple oder Liste
                 values = list(sensor)
 
-            with open("daten.csv", "a", newline="", encoding="utf-8") as f:
+            with open(file_name, "a", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f, delimiter=";")
                 writer.writerow(values)
             print("wurde gespeichert")
