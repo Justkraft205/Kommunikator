@@ -4,11 +4,14 @@ Its functionating out of the boxwith this sorts of sensors: Max17048, DS18B20, E
 Tutorial:
   1.Install all Python Libarys:
             -adafruit_max1704x:
-            -threading:
             -json:
             -timezonefinder:
             -gpiozero:
             -smbus2
+            -mpmath.limp.libmpf
+            -adafruit_bme280
+            -lora_e220
+2. Bring the
 
   
             
