@@ -1,5 +1,5 @@
 #-*- coding: latin-1 -*-
-import shared, threading, check_connection, time, serial, json, ast, logging, csv, smbus2, board, adafruit_max1704x, pytz, os, glob
+import shared, threading, check_connection, time, serial, json, ast, logging, csv, smbus2, board, adafruit_max1704x, pytz, os, glob, pickle
 from flask import Flask, render_template, request, redirect, url_for, jsonify,render_template_string
 from gpiozero import Buzzer, OutputDevice
 from multiprocessing import Process
@@ -29,7 +29,9 @@ def index():
 def new_kontakt():return render_template('new_kontakt.html')
 
 @app.route('/settings')
-def settings(): return render_template('settings.html',freq = shared.current_freq, power=shared.current_power)
+def settings():
+    save_all()
+    return render_template('settings.html',freq = shared.current_freq, power=shared.current_power)
 
 @app.route('/check_position')
 def check_position():return render_template('cords.html')
@@ -48,9 +50,12 @@ def mesange():
 @app.route('/sensoren')
 def sensoren():
     if shared.logger_data:
-        with open(shared.last_file, newline='', encoding='utf-8') as csvfile:
-            reader = csv.reader(csvfile, delimiter=';')
-            data = list(reader)
+        print(shared.last_file)
+        if not shared.last_file == None:
+            with open(f"logings/{shared.last_file}", newline='', encoding='utf-8') as csvfile:
+                reader = csv.reader(csvfile, delimiter=';')
+                data = list(reader)
+        else: data = None
         return render_template('sensor.html', sensor_data=shared.sensor_data, datatime=shared.time_data,
                                logger_active=shared.logger_service, logger_data_check=shared.logger_data, data = data)
     else:return render_template('sensor.html', sensor_data=shared.sensor_data, datatime=shared.time_data,
@@ -203,6 +208,8 @@ def st_logger():
     minuten = request.form.get("minuten")  # liest den Sliderwert
     file_name = request.form.get("file_name")
     file_name= str(file_name) + ".csv"
+    shared.test = "test, Hallo"
+    print(shared.test)
     shared.last_file = file_name
     print("Empfangene Minuten:", minuten)
     logger_service(minuten, file_name)
@@ -256,23 +263,22 @@ def check_battery():
         print("to low battery please shutdown")
         #os.system("sudo shutdown -h now")
 
-def e220_check(port="/dev/serial0", baudrate=9600):
+
+def e220_check():
     try:
-        ser = serial.Serial(port=port, baudrate=baudrate, timeout=1)
-        time.sleep(0.1)
-        ser.write(bytes([0xC1, 0x80, 0x07]))
-        time.sleep(0.1)
-        antwort = ser.read(10)
-        print(antwort)
-        ser.close()
-        if b"\xc1\x80\x07\x00\x00\x10\x16\x0b\x00\x00" in antwort:
-            return True
-        elif antwort:
-            print(f"Unerwartete Antwort empfangen: {antwort}")
-            return False
+        # Modul initialisieren
+        uart = serial.Serial(port="/dev/serial0",baudrate=9600, timeout=1)
+        lora = LoRaE220('900T22D', uart)
+        code = lora.begin()
+        print("Init-Antwort:", ResponseStatusCode.get_description(code))
+        if code == ResponseStatusCode.SUCCESS:return True
         else:
+            print("Keine Antwort vom Modul ?")
             return False
-    except serial.SerialException as e: return False
+
+    except Exception as e:
+        print(f"Fehler beim Zugriff auf E220: {e}")
+        return False
 
 def check_max17048(addr, bus):
     try:
@@ -307,16 +313,8 @@ def init_hardware():
     else:
         shared.battery_level = -10
         shared.fehler += "Battery Ladestand konnte nicht gelesen werden"
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(shared.M0_PIN, GPIO.OUT)
-    GPIO.setup(shared.M1_PIN, GPIO.OUT)
-    GPIO.output(shared.M0_PIN, GPIO.HIGH)
-    GPIO.output(shared.M1_PIN, GPIO.HIGH)
-    time.sleep(0.1)
     if e220_check():
         print("Es funktioniert")
-        GPIO.output(shared.M0_PIN, GPIO.LOW)
-        GPIO.output(shared.M1_PIN, GPIO.LOW)
         time.sleep(0.1)
         shared.ser = serial.Serial(port='/dev/serial0', baudrate=9600, timeout=1)
         shared.lora = LoRaE220('900T22D', shared.ser, aux_pin=shared.aux_pin, m0_pin=shared.M0_PIN, m1_pin=shared.M1_PIN)
@@ -352,11 +350,31 @@ def manager2():
 
 def sound():
     buzzer.on()
-    print("Sound")
     time.sleep(1)
     buzzer.off()
 
+def save_all():
+    variablen = {
+        "skalas": shared.skalas,
+        "sensors": shared.sensors,
+        "current_power": shared.current_power,
+        "current_freq": shared.current_freq,
+    }
+    with open("variablen.pkl", "wb") as f:
+        pickle.dump(variablen, f)
+    print("Alles wichtige wurde gespeichert")
+
+def load_file():
+    print("variablen werden geladen")
+    with open("variablen.pkl", "rb") as f:
+        geladene_variablen = pickle.load(f)
+    # Alle Variablen ins shared-Modul schreiben
+    for name, wert in geladene_variablen.items():
+        setattr(shared, name, wert)
+
+
 if __name__ == '__main__':
+    load_file()
     shared.ser = init_hardware()
     sound()
     if  shared.ser == "404":
@@ -372,4 +390,4 @@ if __name__ == '__main__':
     else:
         print(f"Keine Kontakte:SAD SMILE")
     #logging.getLogger('werkzeug').disabled = True
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
