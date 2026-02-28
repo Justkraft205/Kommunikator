@@ -12,6 +12,7 @@ emp_id = ""
 temperature = None
 humidity = None
 pressure = None
+last_file = None
 logger = None
 stop_event = None
 altitude = None
@@ -356,47 +357,31 @@ def check_sensoren():
         sensor = read_sensors()
         return sensor
     else:
-        read_sensors()
+        t= read_sensors()
+        if not t: print("Error")
 
 
 def read_sensors():
     global temperature, humidity, pressure, altitude
+    teile = shared.skalas.split(",")
     if "BME280" in shared.SENSOREN:
-        if shared.logger_service:
-            shared.sensor_data.update({
-                "Luftfeuchtigkeit": f"{round(shared.bme280.humidity, 1)} %",
-                "Luftdruck": f"{round(shared.bme280.pressure, 1)} hPa",
-                "Temperatur": f"{round(shared.bme280.temperature, 1)} °C"
-            })
-            return shared.sensor_data
-        else:
-
-            temperature = round(shared.bme280.temperature, 1)
-            humidity = round(shared.bme280.humidity, 1)
-            pressure = round(shared.bme280.pressure, 1)
-            altitude = round(shared.bme280.altitude, 1)
-            if not shared.celsius: shared.sensor_data["Temperatur"] = f"{(temperature * 9/5) + 32:.2f} °F"
-            else: shared.sensor_data["Temperatur"] = f"{temperature} °C"
-            shared.sensor_data["Luftfeuchtigkeit"] =f"{humidity} %"
-            shared.sensor_data["Luftdruck"] = f"{pressure} hPa"
-            shared.sensor_data["Altitude"] = f"{altitude} meters"
-            print("Daten der Sensoren werden gelesen")
-            print("Temperature: %0.1f C" % temperature)
-            print("Humidity: %0.1f %%" % humidity)
-            print("absolute Pressure: %0.1f hPa" % pressure)
-            print("Altitude = %0.2f meters" % altitude)
-            print(shared.sensor_data)
-    temp_c = round(shared.temp_c, 1)
-    if shared.temp_c != 0:
-        if shared.celsius:
-            shared.sensor_data["Temp_one"] = f"{temp_c} °C"
-        else:
-            shared.sensor_data["Temp_one"] = f"{(temp_c * 9/5) + 32:.2f} °F"
+        x = round(shared.bme280.humidity, 1)
+        y = round(shared.bme280.pressure, 1)
+        z = round(shared.bme280.temperature, 1)
+        shared.sensor_data.update({
+            "Luftfeuchtigkeit": f"{eval(teile[5])} {teile[4]}",
+            "Luftdruck": f"{eval(teile[3])} {teile[2]}",
+            "Temperatur": f"{eval(teile[1])} {teile[0]}"
+        })
+    z = round(shared.temp_c, 1)
+    if z != 0: shared.sensor_data["Temp_one"] = f"{eval(teile[1])} {teile[0]}"
     shared.time_data = datetime.now().strftime("%H:%M")
+    if shared.logger_service: return shared.sensor_data
+    else: return True
+
 
 def check_i2c_devices(sensor_list, bus_id=1):
     shared.i2c = board.I2C()
-    print("? I²C-Geräte-Check:")
     for name, address in sensor_list:
         try:
             shared.bus.read_byte(address)
@@ -422,9 +407,7 @@ def restart_i2c(bus_id=1):
 
 def check_one_wire():
     device_folders = glob.glob(base_dir + '28-*')
-    if not device_folders:
-        print("? Kein 1-Wire-Sensor gefunden! Bitte Verkabelung prüfen.")
-        return False
+    if not device_folders: return False
     device_folder = device_folders[0]
     shared.device_file = device_folder + '/w1_slave'
     try:
@@ -458,17 +441,22 @@ def read_temp():
         return temp_c, temp_f
 
 def logger_service(minuten, file_name):
-    global logger, stop_event
+    global logger, stop_event, last_file
     print("Startet/stoppt den sensor logger")
     print(f"Wiederholzeit: {minuten}")
     if shared.logger_service:
         print("logger service beenden")
         shared.logger_service = False
+        shared.last_file = last_file
         stop_event.set()  # Signal zum Beenden
         logger.join()
         print("beendet")
+        print(shared.test)
     else:
         shared.logger_service = True
+        print(file_name)
+        last_file = file_name
+        time.sleep(1)
         stop_event = Event()
         logger = Process(target=sensor_logger, args=(minuten,stop_event,file_name))
         logger.start()
@@ -492,7 +480,7 @@ def sensor_logger(minuten, stop_event, file_name):
                 # Fallback, falls Tuple oder Liste
                 values = list(sensor)
 
-            with open(file_name, "a", newline="", encoding="utf-8") as f:
+            with open(f"logings/{file_name}", "a", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f, delimiter=";")
                 writer.writerow(values)
             print("wurde gespeichert")
