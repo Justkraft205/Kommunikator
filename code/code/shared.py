@@ -1,22 +1,34 @@
-battery_level = 0
-setWifiStrength = 2  # 0 bis 4
-fehler = ""
+# Lora:-----------------------------------------------------------------------------------------------------------------
+M1_PIN = 23
+M0_PIN = 24
+aux_pin = 25
+lora = None
 current_power = 13
 current_freq = 18
+battery_level = 0
+#Sensoren:--------------------------------------------------------------------------------------------------------------
 temp_f = 0
+skalas = "°C,z,hpa,y,%,x"
 temp_c = 0
-wert = ""
-M1_PIN = 27
-M0_PIN = 17
-aux_pin = 22
-lora = None
-sensor_data = {}
-kontakte = []
-send = ""
 bus = None
 bme280 = None
+logger_service = False
+logger_data = False
+last_file = None
+celsius = True
+SENSOREN = []
+sensors = [
+        ["BMP", 0x76],
+        ["MAX17048", 0x36]
+    ]
 i2c = None
+sensor_data = {}
+wert = ""
+kontakte = []
+send = ""
 device_file = ""
+setWifiStrength = 2  # 0 bis 4
+fehler = ""
 wetterdaten = [
     ["Heute", "/", "/", "/", "/", "/"],
     ["Morgen", "/", "/", "/", "/", "/"],
@@ -39,10 +51,10 @@ status = {
 }
 myid = "7979173"
 myname = "Pi2"
-SENSOREN = []
 ser = None
 cords =""
 server_id = ""
 serial_number = "088713"
 manager_check = 0
 time_data = None
+test = None
