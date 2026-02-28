@@ -11,6 +11,8 @@ Tutorial:
             -mpmath.limp.libmpf
             -adafruit_bme280
             -lora_e220
+2. Install another Applications:
+  sudo apt install ttyd -y
 2. Bring the
 
   
