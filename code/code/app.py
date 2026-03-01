@@ -1,5 +1,6 @@
 #-*- coding: latin-1 -*-
 import shared, threading, check_connection, time, serial, json, ast, logging, csv, smbus2, board, adafruit_max1704x, pytz, os, glob, pickle
+import socket, subprocess
 from flask import Flask, render_template, request, redirect, url_for, jsonify,render_template_string
 from gpiozero import Buzzer, OutputDevice
 from multiprocessing import Process
@@ -16,6 +17,9 @@ import RPi.GPIO as GPIO
 message_path = "nachrichten.json"
 base_dir = '/sys/bus/w1/devices/'
 DATEI = "nachrichten.json"
+TTYD_PORT = 8787
+TTYD_CMD = ["ttyd", "--writable", "-p", str(TTYD_PORT), "-i", "0.0.0.0", "bash"]
+ttyd_process = None
 app = Flask(__name__)
 #------------------------------Rendering--------------------------------------------------------------------------------
 @app.route('/')
@@ -38,6 +42,11 @@ def check_position():return render_template('cords.html')
 
 @app.route('/wetter')
 def wetter(): return render_template("wetter.html",wetterdaten=shared.wetterdaten,startzeit_js=datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),status=shared.fehler,state=shared.state)
+
+@app.route('/terminal')
+def terminal():
+    start_ttyd()
+    return render_template("terminal.html", battery_level=shared.battery_level)
 
 @app.route("/mesange", methods=["GET", "POST"])
 def mesange():
@@ -100,6 +109,15 @@ def set_frequenz():
         auswahl = "Fehler beim Schreiben"
         return f"<h2><em>{auswahl}</em></h2><a href='/'>Zurück</a>"
     else: return redirect(url_for('settings'))
+
+@app.route('/battery')
+def battery():
+    try:
+        battery = shared.battery_level
+        level = battery.percent if battery else -10
+    except Exception:
+        level = -10
+    return jsonify({'level': int(level)})
 
 @app.route('/show_data')
 def show_data():
@@ -253,6 +271,21 @@ def request_kontakt():
 
 #Initalisierung und main Thread-----------------------------------------------------------------------------------------
 
+def is_port_in_use(port):
+    """Prüft, ob ein Port bereits belegt ist."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("0.0.0.0", port)) == 0
+
+def start_ttyd():
+    global ttyd_process
+    if not is_port_in_use(TTYD_PORT):
+        ttyd_process = subprocess.Popen(TTYD_CMD)
+        # kurze Pause, damit ttyd starten kann
+        time.sleep(1)
+        print(f"ttyd gestartet auf Port {TTYD_PORT}")
+    else:
+        print(f"ttyd läuft bereits auf Port {TTYD_PORT}")
+
 def check_battery():
     voltage = round(shared.max17048.cell_voltage, 2)
     shared.battery_level = round(shared.max17048.cell_percent, 1)
@@ -374,7 +407,8 @@ def load_file():
 
 
 if __name__ == '__main__':
-    load_file()
+    if os.path.exists('variablen.pkl'):
+        load_file()
     shared.ser = init_hardware()
     sound()
     if  shared.ser == "404":
