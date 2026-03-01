@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Terminal</title>
+  <style>
+    body { margin:0; background:#000; color:#0f0; font-family:monospace; }
+    #bar {
+      background:#111; color:#0f0; padding:8px;
+      display:flex; justify-content:space-between; align-items:center;
+    }
+    #bar button {
+      background:#0f0; color:#000; border:none; padding:6px 10px;
+      cursor:pointer; border-radius:5px;
+    }
+    iframe { width:100%; height:calc(100vh - 40px); border:none; }
+
+    .battery-container { display: flex; align-items: center; gap: 8px; }
+    .battery-icon {
+      width: 50px; height: 20px; border: 2px solid #333;
+      position: relative; border-radius: 3px; box-sizing: border-box;
+    }
+    .battery-icon::after {
+      content: ''; position: absolute; right: -6px; top: 4px;
+      width: 4px; height: 12px; background: #333; border-radius: 1px;
+    }
+    .battery-level {
+      height: 100%; background-color: limegreen; transition: width 0.3s;
+    }
+    .battery-text { font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <span>🧠 Konsole</span>
+    <button onclick="window.location.href='/'">Zurück</button>
+    <div class="battery-container">
+      <div class="battery-icon">
+        <div class="battery-level" id="batteryLevel" style="width: {{ battery_level }}%;"></div>
+      </div>
+      <span class="battery-text" id="batteryText">{{ battery_level }}%</span>
+    </div>
+  </div>
+
+  <iframe id="term"></iframe>
+
+  <script>
+    // ttyd läuft auf Port 8787 des gleichen Hosts
+    document.getElementById('term').src = "//" + window.location.hostname + ":8787";
+
+    let updateTimer = null;
+
+    async function updateBattery() {
+      try {
+        const res = await fetch('/battery');
+        const data = await res.json();
+        const levelElem = document.getElementById('batteryLevel');
+        const textElem = document.getElementById('batteryText');
+
+        // Prüfen auf Fehlerwert (-10)
+        if (data.level === -10) {
+          // Batterieanzeige auf rot setzen
+          levelElem.style.width = '100%';
+          levelElem.style.backgroundColor = 'red';
+          textElem.innerText = '⚠️ Fehler';
+          // Weitere Updates stoppen
+          if (updateTimer) clearInterval(updateTimer);
+          console.warn('Batterieüberwachung gestoppt: Fehler erkannt');
+          return;
+        }
+
+        // Normaler Batterie-Update
+        levelElem.style.width = data.level + '%';
+        textElem.innerText = data.level + '%';
+
+        // Farbe je nach Ladestand ändern
+        if (data.level <= 20) {
+          levelElem.style.backgroundColor = 'red';
+        } else if (data.level <= 50) {
+          levelElem.style.backgroundColor = 'orange';
+        } else {
+          levelElem.style.backgroundColor = 'limegreen';
+        }
+
+      } catch (err) {
+        console.error('Batterieupdate fehlgeschlagen:', err);
+      }
+    }
+
+    // Erstes Update sofort, dann alle 20 Sekunden
+    updateBattery();
+    updateTimer = setInterval(updateBattery, 20000);
+  </script>
+</body>
+</html>
