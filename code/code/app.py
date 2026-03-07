@@ -6,8 +6,9 @@ from gpiozero import Buzzer, OutputDevice
 from multiprocessing import Process
 from mpmath.libmp.libmpf import strict_normalize1
 from lora_e220 import LoRaE220
+from lora_e220 import LoRaE220, print_configuration
 from lora_e220_operation_constant import ResponseStatusCode
-from datetime import datetime
+from datetime import datetime, timedelta
 from empfang import empfange_nachricht
 from empfang2 import empfang_normal
 from timezonefinder import TimezoneFinder
@@ -17,11 +18,18 @@ import RPi.GPIO as GPIO
 message_path = "nachrichten.json"
 base_dir = '/sys/bus/w1/devices/'
 DATEI = "nachrichten.json"
+last_reload = datetime.now()
 TTYD_PORT = 8787
+last_action = datetime.now()
 TTYD_CMD = ["ttyd", "--writable", "-p", str(TTYD_PORT), "-i", "0.0.0.0", "bash"]
 ttyd_process = None
 app = Flask(__name__)
 #------------------------------Rendering--------------------------------------------------------------------------------
+@app.before_request
+def count_visit():
+    global last_reload
+    last_reload = datetime.now()
+
 @app.route('/')
 @app.route('/index')
 def index():
@@ -135,17 +143,17 @@ def set_strengh():
             return f"<h2><em>{strengh}</em></h2><a href='/'>Zurück</a>"
         else: return redirect(url_for('settings'))
 
-@app.route('/set_temp', methods=['POST'])
-def set_temp():
-    einheit = request.form.get('tep')
-    if not einheit:
+@app.route('/set_skala', methods=['POST'])
+def set_skala():
+    skala = request.form.get('skalen')
+    if not skala:
         return "Keine Auswahl getroffen!", 400
     else:
-        if einheit == "0":
-            shared.celsius = True
-            return redirect(url_for('settings'))
+        state = change_skalen(skala)
+        if not state:
+            state = "Fehler beim ändern"
+            return f"<h2><em>{skala}</em></h2><a href='/'>Zurück</a>"
         else:
-            shared.celsius = False
             return redirect(url_for('settings'))
 
 @app.route('/check_sensors2')
@@ -223,14 +231,18 @@ def lade(datei):
 
 @app.route("/st_logger", methods=["POST"])
 def st_logger():
-    minuten = request.form.get("minuten")  # liest den Sliderwert
+    minuten = request.form.get("minuten")
     file_name = request.form.get("file_name")
     file_name= str(file_name) + ".csv"
-    shared.test = "test, Hallo"
-    print(shared.test)
-    shared.last_file = file_name
-    print("Empfangene Minuten:", minuten)
-    logger_service(minuten, file_name)
+    if shared.logger_service:
+        a , b = shared.logger_data
+        shared.last_file = b
+        shared.logger_service = False
+    else:
+        print("Empfangene Minuten:", minuten)
+        take_werte()
+        shared.logger_data = [minuten, file_name]
+        shared.logger_service = True
     return redirect(url_for('sensoren'))
 
 @app.route("/send_message", methods=["POST"])
@@ -289,6 +301,7 @@ def start_ttyd():
 def check_battery():
     voltage = round(shared.max17048.cell_voltage, 2)
     shared.battery_level = round(shared.max17048.cell_percent, 1)
+    shared.battery_level= shared.battery_level + 5
     print(f"Spannung: {voltage:.2f} V, Ladezustand: {shared.battery_level:.1f} %")
     if shared.battery_level == 0.0:
         print(f"Spannung: {shared.battery_level:.1f} %")
@@ -299,16 +312,12 @@ def check_battery():
 
 def e220_check():
     try:
-        # Modul initialisieren
         uart = serial.Serial(port="/dev/serial0",baudrate=9600, timeout=1)
         lora = LoRaE220('900T22D', uart)
         code = lora.begin()
         print("Init-Antwort:", ResponseStatusCode.get_description(code))
         if code == ResponseStatusCode.SUCCESS:return True
-        else:
-            print("Keine Antwort vom Modul ?")
-            return False
-
+        else:return False
     except Exception as e:
         print(f"Fehler beim Zugriff auf E220: {e}")
         return False
@@ -354,24 +363,27 @@ def init_hardware():
         time.sleep(1)
         code = shared.lora.begin()
         if code == 1:
-            print("Erfolgreich defined")
+            code, configuration = shared.lora.get_configuration()
+            print("ADDH:", hex(configuration.ADDH))
+            print("ADDL:", hex(configuration.ADDL))
+            shared.ADDH = configuration.ADDH
+            shared.ADDL = configuration.ADDL
         else:
             print("?Fehler beim Starten von Lora")
     else: return "404"
 
 def manager2():
-    print("manager2")
+    global last_reload, last_action
+    print("manager2 gestartet")
     count =0
     while True:
         if shared.manager_check == 0:
+            shared.thread_wait = False
             count = count + 1
             print(count)
             message, server_id = empfang_normal(shared.myid)
             print(f"mes:{message}, ser:{server_id}, manager2")
-            if not message == "404" or None:
-                print("wird aufgerufen")
-                print(f"server_id:{server_id}")
-                check_connection.auswertung(message, server_id)
+            if not message == "404" or None:check_connection.auswertung(message, server_id)
             if count >= 30 and shared.battery_level != 0 and shared.battery_level!= -10 or shared.battery_level ==0.0:
                 print("check_battery")
                 count = 0
@@ -380,7 +392,12 @@ def manager2():
                 shared.notify2 = False
                 thread2 = threading.Thread(target=sound, daemon=True)
                 thread2.start()
-
+        else:
+            shared.thread_wait = True
+        if shared.logger_service:
+            if datetime.now() - last_action > timedelta(minutes=shared.minuten):
+                sensor_logger()
+                last_action = datetime.now()
 def sound():
     buzzer.on()
     time.sleep(1)
@@ -412,10 +429,9 @@ if __name__ == '__main__':
     shared.ser = init_hardware()
     sound()
     if  shared.ser == "404":
-        print("Fehler")
+        print("Fehler:Lora")
         shared.fehler += "Funksystem konnte nicht gestartet werden, Funk deaktiviert"
-    else:
-        threading.Thread(target=manager2, daemon=False).start()
+    else:threading.Thread(target=manager2, daemon=False).start()
     if os.path.exists('kontakt.csv'):
          with open("kontakt.csv", "r", encoding="utf-8") as f: shared.kontakte = list(csv.reader(f))
          print(shared.kontakte)
