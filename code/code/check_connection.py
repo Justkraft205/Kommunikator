@@ -1,12 +1,13 @@
 #-*- coding: latin-1 -*-
 import time, ast, os, pytz, csv, app, shared, json, board, busio, smbus2, adafruit_max1704x, glob, csv
-from adafruit_bme280 import basic as adafruit_bme280
 from multiprocessing import Process, Event
 from lora_e220 import LoRaE220, TransmissionPower
+from i2c_senoren import *
+from i2c_senoren import restarting_i2c
 from lora_e220_operation_constant import ResponseStatusCode
+from datetime import datetime
 import RPi.GPIO as GPIO
 from send import senden
-from datetime import datetime
 from empfang import empfange_nachricht
 emp_id = ""
 temperature = None
@@ -16,7 +17,6 @@ last_file = None
 logger = None
 stop_event = None
 altitude = None
-celsius = True
 base_dir = '/sys/bus/w1/devices/'
 
 # Muss neu gemacht werden!!!
@@ -72,7 +72,6 @@ def clock_update():
 
 def server_anfrage(s_id, number):
     print(f"Server wird angefragt: s_id={s_id}, number={number}")
-
     # Anfrage senden
     manager(1, s_id, f"{shared.myid}.{number}")
     print("Warte auf Antwort...")
@@ -96,7 +95,8 @@ def emp_new_kontakt(device_id):
     print("Empfange Kontakt")
     print(device_id)
     shared.manager_check = 2
-    time.sleep(1)
+    while shared.thread_wait == False:
+        time.sleep(0.1)
     print(datetime.now())
     print("vor")
     manager(1, device_id,"1")
@@ -109,17 +109,17 @@ def emp_new_kontakt(device_id):
     time.sleep(0.1)
     manager(1, device_id,"1")
     print(f"Empfangen:message: {message}, empid: {empid}")
-    key, value = message.split(":")
+    key, value, emp_addh,emp_addl = message.split(":")
     print(key)  # Temperatur
     print(value)  # 25.3
     shared.manager_check = 0
-    save_kontakt(key, value)
+    save_kontakt(key, value, emp_addh, emp_addl)
 
 def send_kontakt(name,ziel):
     print("Kontakt wird angefragt")
     print(f"ziel:{ziel}")
     shared.manager_check = 2
-    time.sleep(1)
+    while shared.thread_wait == False: time.sleep(0.1)
     t, idk = server_anfrage(ziel, 5)
     print(t)
     if t != "1":
@@ -127,7 +127,7 @@ def send_kontakt(name,ziel):
         print(datetime.now())
         shared.manager_check = 0
         return False
-    manager(1, ziel,f"{shared.myname}:{shared.myid}")
+    manager(1, ziel,f"{shared.myname}:{shared.myid}:{shared.ADDH}:{shared.ADDL}")
     message, empid = manager(2, shared.myid, "")
     if message == "1":
         print("Hat geklappt")
@@ -139,9 +139,9 @@ def send_kontakt(name,ziel):
         return False
 
 
-def save_kontakt(name, nummer):
+def save_kontakt(name, nummer, addh, addl):
     print(f"Erstelle neuen Kontakt: {name}, {nummer}")
-    neue_zeile = [name, "", nummer]
+    neue_zeile = [name, f"{addh}:{addl}", nummer]
     with open("kontakt.csv", "a", newline="") as datei:
         writer = csv.writer(datei)
         writer.writerow(neue_zeile)
@@ -152,7 +152,7 @@ def get_last_number(kontakte, name):
     if name is None:return None
     target = name.strip().lower()
     for kontakt in kontakte:
-        if kontakt and kontakt[0].strip().lower() == target:return kontakt[-1]  # letzter Wert der gefundenden Unterliste
+        if kontakt and kontakt[0].strip().lower() == target:return kontakt[0], kontakt[-1]  # letzter Wert der gefundenden Unterliste
     return None
 
 # I think kann gelöscht werden!!!!
@@ -206,7 +206,8 @@ def speichern(id3, nachricht, datei):
 def mes_empfangen(sender_id):
     print("Starte Empfang...")
     shared.manager_check = 2
-    time.sleep(1)
+    while shared.thread_wait == False:
+        time.sleep(0.1)
     manager(1, sender_id, "1")
     nachricht = ""
     fcount = 0
@@ -236,12 +237,13 @@ def mes_empfangen(sender_id):
 
 def mes_senden(option, text):
     shared.manager_check = 2
-    time.sleep(1)
-    ziel = get_last_number(shared.kontakte, option)
+    while shared.thread_wait == False:
+        time.sleep(0.1)
+    ziel, ziel2 = get_last_number(shared.kontakte, option)
     if not ziel:
         print("Kein Ziel gefunden.")
         return False
-    print(f"zieladresse:{ziel}")
+    print(f"zieladresse:{ziel}, {ziel2}")
     t, idk = server_anfrage(ziel,4)
     if t != "1":
         print("Server antwortet nicht.")
@@ -254,7 +256,7 @@ def mes_senden(option, text):
         teil_id = "end" if i == len(teile) - 1 else str(i)
         nachricht = f"{teil_id}:{t}"
         print(f"Sende: {nachricht}")
-        antwort = send_mes(nachricht, ziel)
+        antwort = send_mes(nachricht, ziel, ziel2)
         if antwort == 1 or antwort == "1":
             print(f"Teil {i + 1}/{len(teile)} erfolgreich gesendet.")
             continue
@@ -268,11 +270,16 @@ def mes_senden(option, text):
     speichern(shared.myid, text,"nachrichten.json")
     return True
 
-def send_mes(nachricht, ziel):
+def send_mes(nachricht, ziel, ziel2):
     print("Nachricht wird gesendet:", nachricht)
+    print(f"Empofänger:{ziel}, {ziel2}")
     fcount = 0
     while fcount < 3:
-        manager(1, ziel, nachricht)
+        if ziel2 == None:
+            manager(1, ziel, nachricht)
+        else:
+            ziell, zielh = ziel2.split(":", 1)
+            manager(1, ziel, nachricht, 1, ziell, zielh)
         antwort, _ = manager(2, shared.myid, "")
         print(f"Antwort empfangen: {antwort}")
         if antwort == "1":
@@ -293,7 +300,8 @@ def manager(count,id2,text):
         print(f"id:{id2}, text:{text}")
         print(datetime.now())
         for i in range(2):
-            if count == 1:senden(id2, text)
+            if count == 1:
+                senden(id2, text)
             elif count == 2:
                 message, server_id = empfange_nachricht(shared.myid)
                 print(datetime.now())
@@ -305,6 +313,8 @@ def manager(count,id2,text):
 
 def change_frequenz(channel):
     shared.manager_check = 2
+    while shared.thread_wait == False:
+        time.sleep(0.1)
     channel = int(channel)
     status, configuration = shared.lora.get_configuration()
     if not status == 1: return False
@@ -325,6 +335,8 @@ def change_frequenz(channel):
 def change_power(power_dbm):
     val = 99
     shared.manager_check = 2
+    while shared.thread_wait == False:
+        time.sleep(0.1)
     print(f"?? Ändere Sendeleistung auf {power_dbm} dBm")
     if power_dbm == "22": val = 0
     elif power_dbm == "17": val = 1
@@ -346,64 +358,49 @@ def change_power(power_dbm):
         return True
     else:return False
 
+def change_skalen():
+    print("Hi")
+
 #-----------------------Angeschlossene Sensoren-------------------------------------------------------------------------
 
 def check_sensoren():
     print("Es werden angeschlossene Sensoren geprüft")
-    if not check_one_wire(): shared.temp_c = 0
-    if not restart_i2c(1): return False, False, False
+    t = restarting_i2c()
+    if not t: print("Error")
     check_i2c_devices(shared.sensors)
-    if shared.logger_service:
-        sensor = read_sensors()
-        return sensor
-    else:
-        t= read_sensors()
-        if not t: print("Error")
+    print("ich bin stuck")
+    read_sensors()
+    #if not check_one_wire(): shared.temp_c = 0
+    #if not restart_i2c(1): return False, False, False
+    #check_i2c_devices(shared.sensors)
+    #if shared.logger_service:
+     #   sensor = read_sensors()
+      #  print(f"check_sensor hat als rückgabe:{sensor}")
+       # return sensor
+   # else:
+    #    t= read_sensors()
+     #   if not t: print("Error")
 
 
-def read_sensors():
-    global temperature, humidity, pressure, altitude
-    teile = shared.skalas.split(",")
-    if "BME280" in shared.SENSOREN:
-        x = round(shared.bme280.humidity, 1)
-        y = round(shared.bme280.pressure, 1)
-        z = round(shared.bme280.temperature, 1)
-        shared.sensor_data.update({
-            "Luftfeuchtigkeit": f"{eval(teile[5])} {teile[4]}",
-            "Luftdruck": f"{eval(teile[3])} {teile[2]}",
-            "Temperatur": f"{eval(teile[1])} {teile[0]}"
-        })
-    z = round(shared.temp_c, 1)
-    if z != 0: shared.sensor_data["Temp_one"] = f"{eval(teile[1])} {teile[0]}"
-    shared.time_data = datetime.now().strftime("%H:%M")
-    if shared.logger_service: return shared.sensor_data
-    else: return True
+#def read_sensors():
+ #   global temperature, humidity, pressure, altitude
+  #  teile = shared.skalas.split(",")
+   # shared.sensor_data = {}
+    #if "BME280" in shared.SENSOREN:
+      #  x = round(shared.bme280.humidity, 1)
+     #   y = round(shared.bme280.pressure, 1)
+    #    z = round(shared.bme280.temperature, 1)
+     #   print(dir(shared.bme280))
+     #   shared.sensor_data.update({
+      #      "Luftfeuchtigkeit": f"{eval(teile[5])} {teile[4]}",
+       #     "Luftdruck": f"{eval(teile[3])} {teile[2]}",
+        #    "Temperatur": f"{eval(teile[1])} {teile[0]}"
+       # })
+    #z = round(shared.temp_c, 1)
+    #if z != 0: shared.sensor_data["Temp_one"] = f"{eval(teile[1])} {teile[0]}"
+    #shared.time_data = datetime.now().strftime("%H:%M")
+    #return True
 
-
-def check_i2c_devices(sensor_list, bus_id=1):
-    shared.i2c = board.I2C()
-    for name, address in sensor_list:
-        try:
-            shared.bus.read_byte(address)
-            print(f"{name} antwortet auf Adresse {hex(address)}")
-            if address == 0x36:
-                shared.max17048 = adafruit_max1704x.MAX17048(shared.i2c)
-                shared.SENSOREN.append("MAX17048")
-            if address == 0x76:
-                shared.bme280 = adafruit_bme280.Adafruit_BME280_I2C(shared.i2c, address=0x76)
-                shared.bme280.mode = adafruit_bme280.MODE_NORMAL
-                shared.SENSOREN.append("BME280")
-        except OSError:
-            print(f"{name} antwortet NICHT auf Adresse {hex(address)}")
-            if address == 0x36: shared.battery_level = -10
-
-def restart_i2c(bus_id=1):
-    try:
-        shared.bus.close()
-        time.sleep(0.5)
-        shared.bus = smbus2.SMBus(bus_id)
-        return True
-    except Exception as e: return False
 
 def check_one_wire():
     device_folders = glob.glob(base_dir + '28-*')
@@ -440,53 +437,23 @@ def read_temp():
         temp_f = temp_c * 9.0 / 5.0 + 32.0
         return temp_c, temp_f
 
-def logger_service(minuten, file_name):
-    global logger, stop_event, last_file
-    print("Startet/stoppt den sensor logger")
-    print(f"Wiederholzeit: {minuten}")
-    if shared.logger_service:
-        print("logger service beenden")
-        shared.logger_service = False
-        shared.last_file = last_file
-        stop_event.set()  # Signal zum Beenden
-        logger.join()
-        print("beendet")
-        print(shared.test)
-    else:
-        shared.logger_service = True
-        print(file_name)
-        last_file = file_name
-        time.sleep(1)
-        stop_event = Event()
-        logger = Process(target=sensor_logger, args=(minuten,stop_event,file_name))
-        logger.start()
+def take_werte():
+    print("Vorhandene sensoren werden geprüft")
+    check_sensoren()
+    daten = [list(shared.sensor_data.keys()) + ["Uhrzeit"]]
+    #    with open(f"logings/{shared.file_name}", "w", newline="", encoding="utf-8") as f:
+    #       writer = csv.writer(f, delimiter=";")
+    #      writer.writerows(daten)
 
-
-def sensor_logger(minuten, stop_event, file_name):
-    print("Sensor logger start")
-    seconds = int(minuten) * 60
-    daten = [["Luftdruck", "Temperature", "Luftfeuchte", "Uhrzeit"]]
-    with open(file_name, "w", newline="", encoding="utf-8") as f:
+def sensor_logger():
+    print("Speichern")
+    sensor = check_sensoren()
+    print("logger hat als rückgabe:", sensor)
+    if isinstance(sensor, dict): values = [sensor.get("Luftdruck"), sensor.get("Temperatur"), sensor.get("Luftfeuchtigkeit"), datetime.now().strftime("%H:%M")]
+    else:values = list(sensor)
+    with open(f"logings/{shared.file_name}", "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, delimiter=";")
-        writer.writerows(daten)
-    t_count = 0
-    while not stop_event.is_set():
-        if t_count >= seconds:
-            print("Speichern")
-            sensor = check_sensoren()
-            if isinstance(sensor, dict):
-                values = [sensor.get("Luftdruck"), sensor.get("Temperatur"), sensor.get("Luftfeuchtigkeit"), datetime.now().strftime("%H:%M")]
-            else:
-                # Fallback, falls Tuple oder Liste
-                values = list(sensor)
-
-            with open(f"logings/{file_name}", "a", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f, delimiter=";")
-                writer.writerow(values)
-            print("wurde gespeichert")
-            print(sensor)
-            t_count = 0
-        time.sleep(10)
-        t_count += 10
+        writer.writerow(values)
+    print("wurde gespeichert")
 
 
