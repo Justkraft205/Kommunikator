@@ -2,8 +2,8 @@
 import time, ast, os, pytz, csv, app, shared, json, board, busio, smbus2, adafruit_max1704x, glob, csv
 from multiprocessing import Process, Event
 from lora_e220 import LoRaE220, TransmissionPower
-from i2c_senoren import *
-from i2c_senoren import restarting_i2c
+from i2c_sensoren import *
+from i2c_sensoren import restarting_i2c
 from lora_e220_operation_constant import ResponseStatusCode
 from datetime import datetime
 import RPi.GPIO as GPIO
@@ -12,6 +12,7 @@ from empfang import empfange_nachricht
 emp_id = ""
 temperature = None
 humidity = None
+logger_counter = 0
 pressure = None
 last_file = None
 logger = None
@@ -437,23 +438,25 @@ def read_temp():
         temp_f = temp_c * 9.0 / 5.0 + 32.0
         return temp_c, temp_f
 
-def take_werte():
-    print("Vorhandene sensoren werden geprüft")
-    check_sensoren()
-    daten = [list(shared.sensor_data.keys()) + ["Uhrzeit"]]
-    #    with open(f"logings/{shared.file_name}", "w", newline="", encoding="utf-8") as f:
-    #       writer = csv.writer(f, delimiter=";")
-    #      writer.writerows(daten)
-
 def sensor_logger():
+    global logger_counter
+    logger_counter += 1
     print("Speichern")
-    sensor = check_sensoren()
-    print("logger hat als rückgabe:", sensor)
-    if isinstance(sensor, dict): values = [sensor.get("Luftdruck"), sensor.get("Temperatur"), sensor.get("Luftfeuchtigkeit"), datetime.now().strftime("%H:%M")]
-    else:values = list(sensor)
+    check_sensoren()
+    if logger_counter == 1:
+        header = shared.header + ["Uhrzeit"]
+        with open(f"logings/{shared.file_name}", "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f, delimiter=";")
+            writer.writerow(header)
+    print("logger hat als rückgabe:", shared.sensor_data)
+    if isinstance(shared.sensor_data, dict):
+        values = [shared.sensor_data.get(k) for k in shared.header]
+        values.append(datetime.now().strftime("%H:%M"))
+    else:
+        values = list(shared.sensor_data)
     with open(f"logings/{shared.file_name}", "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, delimiter=";")
         writer.writerow(values)
+    shared.sensor_data.clear()
     print("wurde gespeichert")
-
 
