@@ -74,9 +74,9 @@ def sensoren():
                 data = list(reader)
         else: data = None
         return render_template('sensor.html', sensor_data=shared.sensor_data, datatime=shared.time_data,
-                               logger_active=shared.logger_service, logger_data_check=shared.logger_data, data = data)
+                               logger_active=shared.logger_service, logger_data_check=shared.logger_data2, data = data)
     else:return render_template('sensor.html', sensor_data=shared.sensor_data, datatime=shared.time_data,
-                               logger_active=shared.logger_service, logger_data_check=shared.logger_data)
+                               logger_active=shared.logger_service, logger_data_check=shared.logger_data2, data = None)
 
 #Routen-----------------------------------------------------------------------------------------------------------------
 @app.route('/check_message')
@@ -129,7 +129,7 @@ def battery():
 
 @app.route('/show_data')
 def show_data():
-    shared.logger_data = True
+    shared.logger_data2 = True
     return redirect(url_for('sensoren'))
 
 @app.route('/set_strengh', methods=['POST'])
@@ -238,10 +238,13 @@ def st_logger():
         a , b = shared.logger_data
         shared.last_file = b
         shared.logger_service = False
+        shared.header.clear()
+        shared.sensor_data.clear()
     else:
         print("Empfangene Minuten:", minuten)
         take_werte()
         shared.logger_data = [minuten, file_name]
+        shared.file_name = file_name
         shared.logger_service = True
     return redirect(url_for('sensoren'))
 
@@ -395,7 +398,8 @@ def manager2():
         else:
             shared.thread_wait = True
         if shared.logger_service:
-            if datetime.now() - last_action > timedelta(minutes=shared.minuten):
+            a, b = shared.logger_data
+            if datetime.now() - last_action > timedelta(minutes=int(a)):
                 sensor_logger()
                 last_action = datetime.now()
 def sound():
