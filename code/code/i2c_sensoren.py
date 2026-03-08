@@ -4,46 +4,45 @@ import shared, board, adafruit_max1704x, time, smbus2
 def restarting_i2c(bus_id=1):
     try:
         shared.bus.close()
-        shared.SENSOREN = []
-        time.sleep(0.5)
+        time.sleep(0.1)
         shared.bus = smbus2.SMBus(bus_id)
         return True
-    except Exception as e: return False
+    except Exception: return False
 
+def read_sensors(sensoren):
+    skala = shared.skalas.split(",")
+    shared.sensor_data = {}
+    ok, name = bme280(skala, sensoren)
+    if not ok: print(f"Fehler bei: {name}")
+    #Füge unter halb dieser Zeile deine eigenen Sensoren hinzu
+    return True
 
 def check_i2c_devices(sensor_list):
+    sensoren = {}
     shared.i2c = board.I2C()
     print("Aktive Sensoren:", shared.SENSOREN)
     for name, address in sensor_list:
         try:
             shared.bus.read_byte(address)
             print(f"{name} antwortet auf Adresse {hex(address)}")
-            if address == 0x36:
-                shared.max17048 = adafruit_max1704x.MAX17048(shared.i2c)
-                shared.SENSOREN.append("MAX17048")
+            if address == 0x36: sensoren["max17048"] = adafruit_max1704x.MAX17048(shared.i2c)
             if address == 0x76:
-                shared.bme280 = adafruit_bme280.Adafruit_BME280_I2C(shared.i2c, address=0x76)
-                shared.bme280.mode = adafruit_bme280.MODE_NORMAL
-                shared.SENSOREN.append("BME280")
-            print("Es wird gemacht")
+                sensor = adafruit_bme280.Adafruit_BME280_I2C(shared.i2c, address=0x76)
+                sensor.mode = adafruit_bme280.MODE_NORMAL
+                sensoren["BME280"] = sensor
+            #Füge unter halb dieser Zeile deine eigenen Sensoren hinzu
         except OSError:
             print(f"{name} antwortet NICHT auf Adresse {hex(address)}")
             if address == 0x36: shared.battery_level = -10
+    return sensoren
 
-def read_sensors():
-    teile = shared.skalas.split(",")
-    shared.sensor_data = {}
-    print("Hier kannst du eigene Hinzufügen")
-    ok, name = bme280(teile)
-    if not ok: print(f"Fehler bei: {name}")
-#-----------------------------------------------------------------------------------------------------------------------
+#Hier der Lese code deiner Sensoren-------------------------------------------------------------------------------------
 
-
-def bme280(teile):
-    if "BME280" in shared.SENSOREN:
-        x = round(shared.bme280.humidity, 1)
-        y = round(shared.bme280.pressure, 1)
-        z = round(shared.bme280.temperature, 1)
+def bme280(teile, sensoren):
+    if "BME280" in sensoren:
+        x = round(sensoren["BME280"].humidity, 1)
+        y = round(sensoren["BME280"].pressure, 1)
+        z = round(sensoren["BME280"].temperature, 1)
         shared.sensor_data.update({
             "Luftfeuchtigkeit": f"{eval(teile[5])} {teile[4]}",
             "Luftdruck": f"{eval(teile[3])} {teile[2]}",
