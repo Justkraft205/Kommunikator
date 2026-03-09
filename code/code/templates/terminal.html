@@ -44,52 +44,46 @@
 
   <iframe id="term"></iframe>
 
-  <script>
-    // ttyd läuft auf Port 8787 des gleichen Hosts
-    document.getElementById('term').src = "//" + window.location.hostname + ":8787";
+<script>
+document.getElementById('term').src = "//" + window.location.hostname + ":8787";
 
-    let updateTimer = null;
+async function updateBattery() {
+  try {
+    const res = await fetch('/battery');
+    const data = await res.json();
 
-    async function updateBattery() {
-      try {
-        const res = await fetch('/battery');
-        const data = await res.json();
-        const levelElem = document.getElementById('batteryLevel');
-        const textElem = document.getElementById('batteryText');
+    const level = Number(data.level);
 
-        // Prüfen auf Fehlerwert (-10)
-        if (data.level === -10) {
-          // Batterieanzeige auf rot setzen
-          levelElem.style.width = '100%';
-          levelElem.style.backgroundColor = 'red';
-          textElem.innerText = '⚠️ Fehler';
-          // Weitere Updates stoppen
-          if (updateTimer) clearInterval(updateTimer);
-          console.warn('Batterieüberwachung gestoppt: Fehler erkannt');
-          return;
-        }
+    const levelElem = document.getElementById('batteryLevel');
+    const textElem = document.getElementById('batteryText');
 
-        // Normaler Batterie-Update
-        levelElem.style.width = data.level + '%';
-        textElem.innerText = data.level + '%';
-
-        // Farbe je nach Ladestand ändern
-        if (data.level <= 20) {
-          levelElem.style.backgroundColor = 'red';
-        } else if (data.level <= 50) {
-          levelElem.style.backgroundColor = 'orange';
-        } else {
-          levelElem.style.backgroundColor = 'limegreen';
-        }
-
-      } catch (err) {
-        console.error('Batterieupdate fehlgeschlagen:', err);
-      }
+    // Fehlerzustand
+    if (level === -10) {
+      levelElem.style.width = '100%';
+      levelElem.style.backgroundColor = 'red';
+      textElem.innerText = '⚠️ Fehler';
+      return;
     }
 
-    // Erstes Update sofort, dann alle 20 Sekunden
-    updateBattery();
-    updateTimer = setInterval(updateBattery, 20000);
-  </script>
+    // Normale Anzeige
+    levelElem.style.width = level + '%';
+    textElem.innerText = level + '%';
+
+    if (level <= 20) {
+      levelElem.style.backgroundColor = 'red';
+    } else if (level <= 50) {
+      levelElem.style.backgroundColor = 'orange';
+    } else {
+      levelElem.style.backgroundColor = 'limegreen';
+    }
+
+  } catch (err) {
+    console.error('Batterieupdate fehlgeschlagen:', err);
+  }
+}
+
+updateBattery();
+setInterval(updateBattery, 20000);
+</script>
 </body>
 </html>
