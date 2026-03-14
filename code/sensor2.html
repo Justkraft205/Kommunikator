@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensor Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 2px;
+            padding: 40px;
+        }
+        * { box-sizing: border-box; }
+
+        header {
+            width: 100%;
+            text-align: center;
+            margin-bottom: 1px;
+            top: 0;
+            position: absolute;
+        }
+
+        .reboot {
+            margin-top: 20px;
+            gap:1px;
+            padding:15px;
+        }
+
+        .werte {
+            margin-top: 25px; /* mehr Abstand für Header/Batterie */
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            justify-content: center;
+            gap: 20px;
+            width: 100%;
+            max-width: 1300px;
+        }
+
+        .sensor-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            width: 200px;
+            padding: 15px;
+            text-align: center;
+            transition: transform 0.2s ease;
+        }
+
+        .sensor-card:hover {
+            transform: scale(1.05);
+        }
+
+        h2 { font-size: 1.3em; color: #333; }
+        p { font-size: 1.1em; color: #555; }
+
+        button {
+            margin-top: 20px;
+            background-color: #0078D7;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s;
+        }
+        button:hover { background-color: #005fa3; }
+        button:disabled { background-color: #999; cursor: not-allowed; }
+
+        .table-container {
+            width: 90%;
+            max-height: 400px;
+            overflow-y: auto;
+            margin: 30px auto;
+            border: 1px solid #ccc;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+        }
+        table { width: 100%; border-collapse: collapse; font-size: 0.95em; }
+        th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+        th { background-color: #0078D7; color: white; position: sticky; top: 0; z-index: 1; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        tr:hover { background-color: #f1f1f1; }
+
+        .btn {
+            position: absolute;
+            left: 10px;
+            top: 10px;
+            background-color: #0078D7;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+        .btn:hover { background-color: #005fa3; }
+        .table-container {
+    width: 90%;
+    max-height: 300px;   /* etwa 10 Zeilen sichtbar */
+    overflow-y: auto;
+    margin: 30px auto;
+    border: 1px solid #ccc;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95em;
+}
+
+th, td {
+    border: 1px solid #ddd;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+tr {
+    height: 35px;
+}
+
+th {
+    background-color: #0078D7;
+    color: white;
+    position: sticky;
+    top: 0;
+}
+        /* Batterieanzeige */
+        .battery-container {
+    display: flex;
+    position: absolute;   /* fehlt */
+    right: 20px;          /* Abstand vom rechten Rand */
+    top: 20px;            /* Abstand vom oberen Rand */
+    gap: 8px;
+    margin-top: 10px;
+}
+        .battery-icon {
+            width: 50px;
+            height: 20px;
+            border: 2px solid #333;
+            position: relative;
+            border-radius: 3px;
+            box-sizing: border-box;
+        }
+        .battery-icon::after {
+            content: '';
+            position: absolute;
+            right: -6px;
+            top: 4px;
+            width: 4px;
+            height: 12px;
+            background: #333;
+            border-radius: 1px;
+        }
+        .battery-level {
+            height: 100%;
+            width: 0%;
+            right:4px;
+            background-color: limegreen;
+            transition: width 0.3s, background-color 0.3s;
+        }
+        .battery-text { font-size: 16px; }
+    </style>
+</head>
+<body>
+<header>
+    <h1>Sensor Dashboard</h1>
+    <a href="{{ url_for('index') }}" class="btn">Zurück</a>
+
+    <hr style="width:100%;text-align:left;margin-left:0">
+</header>
+    <!-- Batterieanzeige -->
+<div class="battery-container">
+    <div class="battery-icon">
+        <div class="battery-level" id="batteryLevel"></div>
+    </div>
+    <span class="battery-text" id="batteryText">0%</span>
+</div>
+
+<div class="reboot">
+    <button id="updateButton">Werte aktualisieren</button>
+</div>
+
+<div class="werte">
+    {% for title, value in sensor_data.items() %}
+        {% if value is not none and value != "None" %}
+            <div class="sensor-card">
+                <h2>{{ title }}</h2>
+                <p>{{ value }}</p>
+            </div>
+        {% endif %}
+    {% endfor %}
+</div>
+
+<p>Letzte Aktualisierung: {{ datatime }}</p>
+
+<script>
+    // Sensorwerte aktualisieren
+    document.getElementById("updateButton").addEventListener("click", async function() {
+        const button = this;
+        button.disabled = true;
+        button.textContent = "Aktualisiere...";
+
+        try {
+            const response = await fetch("/check_sensors");
+            const data = await response.json();
+
+            if (data.status === "ok") {
+                location.reload();
+            } else {
+                alert("Fehler beim Aktualisieren der Werte!");
+                button.disabled = false;
+                button.textContent = "Werte aktualisieren";
+            }
+        } catch (err) {
+            alert("Verbindung zum Server fehlgeschlagen!");
+            button.disabled = false;
+            button.textContent = "Werte aktualisieren";
+        }
+    });
+
+    // Batterieanzeige aktualisieren
+    async function updateBattery() {
+        try {
+            const res = await fetch('/battery');
+            const data = await res.json();
+            const level = Number(data.level ?? 0);
+
+            const levelElem = document.getElementById('batteryLevel');
+            const textElem = document.getElementById('batteryText');
+
+            if (level === -10) {
+                levelElem.style.width = '100%';
+                levelElem.style.backgroundColor = 'red';
+                textElem.innerText = '⚠️ Fehler';
+                return;
+            }
+
+            levelElem.style.width = level + '%';
+            textElem.innerText = level + '%';
+
+            if (level <= 20) levelElem.style.backgroundColor = 'red';
+            else if (level <= 50) levelElem.style.backgroundColor = 'orange';
+            else levelElem.style.backgroundColor = 'limegreen';
+
+        } catch(err) {
+            console.error('Batterieupdate fehlgeschlagen:', err);
+        }
+    }
+
+    updateBattery();
+    setInterval(updateBattery, 20000);
+</script>
+<hr style="width:100%;text-align:left;margin-left:0">
+<!-- Rest deiner Formulare und Tabellen -->
+{% if not logger_active %}
+<form id="volumeForm" method="POST" action="/st_logger">
+    <label for="demorange">Minuten: <span id="volValue">2</span></label>
+    <input id="demorange" name="minuten" type="range" min="1" max="30" step="1" value="2">
+    <input type="text" name="file_name" id="file_name" placeholder="Datei-Name" pattern="[A-Za-z0-9]+" title="Nur Buchstaben (a-z, A-Z) und Zahlen (0-9) erlaubt" required minlength="2" maxlength="6">
+    <button type="submit">Start</button>
+</form>
+<script>
+    const slider = document.querySelector("#demorange");
+    const output = document.querySelector("#volValue");
+    slider.addEventListener("input", function () { output.textContent = this.value; });
+    const fileInput = document.getElementById("file_name");
+    fileInput.addEventListener("input", () => { fileInput.value = fileInput.value.replace(/[^A-Za-z0-9]/g, ""); });
+</script>
+{% else %}
+<form id="stopForm" method="POST" action="/st_logger" style="text-align:center; margin-top:20px;">
+    <input type="hidden" name="minuten" value="0">
+    <button type="submit" style="background-color:#d9534f;color:white;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:1em;">🛑 Stop</button>
+</form>
+{% endif %}
+<hr style="width:100%;text-align:left;margin-left:0">
+<form action="/show_data" method="get">
+    <button type="submit">Zeige Daten</button>
+</form>
+
+{% if logger_data_check %}
+<h1>Aufzeichnung:</h1>
+
+<div class="table-container">
+<table>
+
+<thead>
+<tr>
+{% for header in data[0] %}
+<th>{{ header }}</th>
+{% endfor %}
+</tr>
+</thead>
+
+<tbody>
+{% for row in data[1:] %}
+<tr>
+{% for cell in row %}
+<td>{{ cell }}</td>
+{% endfor %}
+</tr>
+{% endfor %}
+</tbody>
+
+</table>
+</div>
+
+{% endif %}
+</body>
+</html>
