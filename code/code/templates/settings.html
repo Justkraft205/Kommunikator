@@ -10,6 +10,11 @@
             margin: 50px;
             background-color: #f4f4f4;
         }
+        .disabled-btn {
+    background-color: red !important;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
         form {
             background: white;
             padding: 20px;
@@ -35,27 +40,47 @@
     <a href="{{ url_for('index') }}">Zurück</a>
 
     <h2>Wähle eine Frequenz:</h2>
-    <form action="/set_frequenz" method="POST">
-        <label for="auswahl">Frequenz:</label>
-        <select name="auswahl" id="auswahl" required>
-            <option value="13" {% if freq == 13 %}selected{% endif %}>863.125 MHz</option>
-            <option value="14" {% if freq == 14 %}selected{% endif %}>864.125 MHz</option>
-            <option value="15" {% if freq == 15 %}selected{% endif %}>865.125 MHz</option>
-            <option value="16" {% if freq == 16 %}selected{% endif %}>866.125 MHz</option>
-            <option value="17" {% if freq == 17 %}selected{% endif %}>867.125 MHz</option>
-            <option value="18" {% if freq == 18 %}selected{% endif %}>868.125 MHz (Standard)</option>
-        </select>
-        <button type="submit">Absenden</button>
-    </form>
+<form action="/set_frequenz" method="POST">
+    <label for="auswahl">Frequenz:</label>
+    <select name="auswahl" id="auswahl" required>
+        <option value="13" {% if freq == 13 %}selected{% endif %}>863.125 MHz</option>
+        <option value="14" {% if freq == 14 %}selected{% endif %}>864.125 MHz</option>
+        <option value="15" {% if freq == 15 %}selected{% endif %}>865.125 MHz</option>
+        <option value="16" {% if freq == 16 %}selected{% endif %}>866.125 MHz</option>
+        <option value="17" {% if freq == 17 %}selected{% endif %}>867.125 MHz</option>
+        <option value="18" {% if freq == 18 %}selected{% endif %}>868.125 MHz (Standard)</option>
+    </select>
+    <button type="submit"
+        {% if freq == -10 %}
+            class="disabled-btn" disabled
+        {% endif %}>
+        Absenden
+    </button>
+</form>
+
 
     <h2>Wähle die Sendeleistung:</h2>
-    <form action="/set_strengh" method="POST">
-        <label for="strengh">Sendeleistung:</label>
-        <select name="strengh" id="strengh" required>
-            <option value="22" {% if power == 22 %}selected{% endif %}>22 dBm (Nicht EU Konform)</option>
-            <option value="17" {% if power == 17 %}selected{% endif %}>17 dBm (Nicht EU Konform)</option>
-            <option value="13" {% if power == 13 %}selected{% endif %}>13 dBm (Standard)</option>
-            <option value="10" {% if power == 10 %}selected{% endif %}>10 dBm</option>
+<form action="/set_strengh" method="POST">
+    <label for="strengh">Sendeleistung:</label>
+    <select name="strengh" id="strengh" required>
+        <option value="22" {% if power == 22 %}selected{% endif %}>22 dBm (Nicht EU Konform)</option>
+        <option value="17" {% if power == 17 %}selected{% endif %}>17 dBm (Nicht EU Konform)</option>
+        <option value="13" {% if power == 13 %}selected{% endif %}>13 dBm (Standard)</option>
+        <option value="10" {% if power == 10 %}selected{% endif %}>10 dBm</option>
+    </select>
+    <button type="submit"
+        {% if power == -10 %}
+            class="disabled-btn" disabled
+        {% endif %}>
+        Absenden
+    </button>
+</form>
+    <h2>Wähle deine Einheiten:</h2>
+    <form action="/set_skala" method="POST">
+        <label for="skalen">Sendeleistung:</label>
+        <select name="skalen" id="skalen" required>
+            <option value="DE" {% if skalen == DE %}selected{% endif %}>Deutsch(Celsius)</option>
+            <option value="USA" {% if skalen == USA %}selected{% endif %}>American(Farenheit</option>
         </select>
         <button type="submit">Absenden</button>
     </form>
