@@ -15,6 +15,7 @@ Tutorial:
             -adafruit_bme280: pip install adafruit-circuitpython-bme280 --break-system-packages
             -lora_e220: pip install ebyte-lora-e220-rpi --break-system-packages
             -flask 
+            -ttyd:sudo apt install ttyd
 2. Install another Applications:
   sudo apt install ttyd -y
 2. Bring the
