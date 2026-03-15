@@ -7,19 +7,14 @@ current_power = 13
 current_freq = 18
 ADDH = None
 ADDL = None
-battery_level = 0
 #Sensoren:--------------------------------------------------------------------------------------------------------------
-temp_f = 0
 skalas = "°C,z,hpa,y,%,x"
-temp_c = 0
 bus = None
-bme280 = None
 logger_service = False
 header = []
 logger_data = None
 logger_data2 = False
 last_file = None
-celsius = True
 SENSOREN = []
 sensors = [
         ["BMP", 0x76],
@@ -27,12 +22,14 @@ sensors = [
     ]
 i2c = None
 sensor_data = {}
+battery_level = 0
 wert = ""
 kontakte = []
 send = ""
 device_file = ""
 setWifiStrength = 2  # 0 bis 4
 fehler = ""
+fehler2 = ""
 wetterdaten = [
     ["Heute", "/", "/", "/", "/", "/"],
     ["Morgen", "/", "/", "/", "/", "/"],
@@ -44,17 +41,11 @@ long = "??"
 lat = "??"
 notify = False
 notify2 = False
-max17048 = None
 hoehe = "??"
-shared_data = {"status56": "init2", "message": "","message2": "", "wetterdaten": wetterdaten, "funk":0,"timeout":0}
 state = True
-status = {
-    'label1': 'Bereit',
-    'label2': 'Bereit',
-    'label3': 'Bereit'
-}
 myid = "7979173"
 myname = "Pi2"
+fixed_message = False
 ser = None
 cords =""
 server_id = ""
@@ -64,3 +55,14 @@ time_data = None
 test = None
 thread_wait = False
 file_name = None
+
+# I guess can weg
+temp_c = 0
+temp_f = 0
+shared_data = {"status56": "init2", "message": "","message2": "", "wetterdaten": wetterdaten, "funk":0,"timeout":0}
+status = {
+    'label1': 'Bereit',
+    'label2': 'Bereit',
+    'label3': 'Bereit'
+}
+celsius = True
