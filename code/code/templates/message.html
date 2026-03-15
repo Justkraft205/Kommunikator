@@ -15,6 +15,11 @@
       padding: 8px 12px;
       text-align: left;
     }
+            .disabled-btn {
+    background-color: red !important;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
     th {
       background-color: #f2f2f2;
     }
@@ -42,7 +47,12 @@
     <input type="text" name="neue_option" placeholder="Text">
 
     <!-- Nur ein Button für alles -->
-    <button type="submit">Absenden</button>
+    <button type="submit"
+        {% if freq == -10 %}
+            class="disabled-btn" disabled
+        {% endif %}>
+        Absenden
+    </button>
   </form>
 
   {% if auswahl %}
