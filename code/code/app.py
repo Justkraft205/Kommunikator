@@ -1,5 +1,5 @@
 #-*- coding: latin-1 -*-
-import shared, threading, check_connection, time, serial, json, ast, logging, csv, smbus2, board, adafruit_max1704x, pytz, os, glob, pickle
+import shared, threading, check_connection, time, serial, json, ast, logging, csv, smbus2, board, adafruit_max1704x, pytz, os, glob, pickle, sys
 import socket, subprocess
 from flask import Flask, render_template, request, redirect, url_for, jsonify,render_template_string
 from gpiozero import Buzzer, OutputDevice
@@ -357,33 +357,37 @@ def init_hardware():
         shared.battery_level = -10
         shared.fehler += "Battery Ladestand konnte nicht gelesen werden"
     if e220_check():
-        print("Es funktioniert")
-        time.sleep(0.1)
-        shared.ser = serial.Serial(port='/dev/serial0', baudrate=9600, timeout=1)
-        shared.lora = LoRaE220('900T22D', shared.ser, aux_pin=shared.aux_pin, m0_pin=shared.M0_PIN, m1_pin=shared.M1_PIN)
-        time.sleep(1)
-        code = shared.lora.begin()
-        if code == 1:
-            for i in range(3):
-                try:
+        for i in range(3):
+            try:
+                print("Es funktioniert")
+                time.sleep(0.1)
+                shared.ser = serial.Serial(port='/dev/serial0', baudrate=9600, timeout=1)
+                shared.lora = LoRaE220('900T22D', shared.ser, aux_pin=shared.aux_pin, m0_pin=shared.M0_PIN, m1_pin=shared.M1_PIN)
+                time.sleep(1)
+                code = shared.lora.begin()
+                if code == 1:
                     code, configuration = shared.lora.get_configuration()
                     print("ADDH:", hex(configuration.ADDH))
                     print("ADDL:", hex(configuration.ADDL))
                     shared.ADDH = configuration.ADDH
                     shared.ADDL = configuration.ADDL
+                    threading.Thread(target=manager2, daemon=False).start()
                     break
-                except Exception as e:
-                    print("Fehler:", e)
-                    print("Versuch", i + 1, "von", 3)
-                    if i == 3 - 1: exit()
-            threading.Thread(target=manager2, daemon=False).start()
-        else:
-            print("?Fehler beim Starten von Lora")
-            shared.fehler += "Funksystem konnte nicht gestartet werden, Funk deaktiviert"
-            shared.current_freq = -10
-            shared.current_power = -10
-            shared.fehler2 += "1"
-    else: return "404"
+            except Exception as e:
+                print("Fehler:", e)
+                print("Versuch", i + 1, "von", 3)
+                shared.ser.close()
+                if i == 3 - 1: lora_fehler()
+    else:
+        lora_fehler()
+        return "404"
+
+def lora_fehler():
+    print("?Fehler beim Starten von Lora")
+    shared.fehler += "Funksystem konnte nicht gestartet werden, Funk deaktiviert"
+    shared.current_freq = -10
+    shared.current_power = -10
+    shared.fehler2 += "1"
 
 def manager2():
     global last_reload, last_action
