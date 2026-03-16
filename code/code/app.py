@@ -11,7 +11,7 @@ from lora_e220_operation_constant import ResponseStatusCode
 from datetime import datetime, timedelta
 from empfang import empfange_nachricht
 from empfang2 import empfang_normal
-from timezonefinder import TimezoneFinder
+#from timezonefinder import TimezoneFinder
 from check_connection import *
 import RPi.GPIO as GPIO
 #Variables--------------------------------------------------------------------------------------------------------------
@@ -54,6 +54,7 @@ def wetter(): return render_template("wetter.html",wetterdaten=shared.wetterdate
 @app.route('/terminal')
 def terminal():
     start_ttyd()
+    print(shared.battery_level)
     return render_template("terminal.html", battery_level=shared.battery_level)
 
 @app.route("/mesange", methods=["GET", "POST"])
@@ -62,7 +63,7 @@ def mesange():
     nachrichten = None
     print(shared.fehler)
     zeilen = []
-    return render_template("message.html",optionen=shared.optionen,auswahl=auswahl,status=shared.fehler,wert=wert,nachrichten=nachrichten,zeilen=zeilen)
+    return render_template("message.html",optionen=shared.optionen,auswahl=auswahl,status=shared.fehler,wert=wert,nachrichten=nachrichten,zeilen=zeilen, freq = shared.current_freq)
 
 @app.route('/sensoren')
 def sensoren():
@@ -115,7 +116,7 @@ def set_frequenz():
     state = change_frequenz(auswahl)
     if not state:
         auswahl = "Fehler beim Schreiben"
-        return f"<h2><em>{auswahl}</em></h2><a href='/'>Zurück</a>"
+        return f'<h2><em>{auswahl}</em></h2><a href="{url_for("settings")}">Zurück</a>'
     else: return redirect(url_for('settings'))
 
 @app.route('/battery')
@@ -140,7 +141,7 @@ def set_strengh():
         state = change_power(strengh)
         if not state:
             strengh = "Fehler beim Schreiben"
-            return f"<h2><em>{strengh}</em></h2><a href='/'>Zurück</a>"
+            return f'<h2><em>{strengh}</em></h2><a href="{url_for("settings")}">Zurück</a>'
         else: return redirect(url_for('settings'))
 
 @app.route('/set_skala', methods=['POST'])
@@ -152,7 +153,7 @@ def set_skala():
         state = change_skalen(skala)
         if not state:
             state = "Fehler beim ändern"
-            return f"<h2><em>{skala}</em></h2><a href='/'>Zurück</a>"
+            return f"<h2><em>{skala}</em></h2><a href='{url_for('settings')}'>Zurück</a>"
         else:
             return redirect(url_for('settings'))
 
@@ -172,14 +173,14 @@ def save_location():
         height_accuracy = data.get('altitudeAccuracy')
         print(f"Empfangene Koordinaten: {lat}, {lon} (Genauigkeit: {accuracy}m),höhen genauigkeit:{height_accuracy}, höhe:{height}")
         shared.hoehe = height
-        tf = TimezoneFinder(in_memory=True)
-        tz = tf.timezone_at(lng=lon, lat=lat)
-        shared.long = lon
-        shared.lat = lat
-        print("Zeitzone:", tz)
-        berlin_tz = pytz.timezone(tz)
-        berlin_jetzt = datetime.now(berlin_tz)
-        print(f"Berlin: {berlin_jetzt}")
+      #  tf = TimezoneFinder(in_memory=True)
+       # tz = tf.timezone_at(lng=lon, lat=lat)
+       # shared.long = lon
+        #shared.lat = lat
+      #  print("Zeitzone:", tz)
+       # berlin_tz = pytz.timezone(tz)
+        #berlin_jetzt = datetime.now(berlin_tz)
+        #print(f"Berlin: {berlin_jetzt}")
         #try:
          #   subprocess.run(["sudo", "date", "--set", message], check=True, capture_output=True, text=True)
           #  return 0
@@ -241,10 +242,7 @@ def st_logger():
         shared.header.clear()
         shared.sensor_data.clear()
     else:
-        print("Empfangene Minuten:", minuten)
-        take_werte()
         shared.logger_data = [minuten, file_name]
-        shared.file_name = file_name
         shared.logger_service = True
     return redirect(url_for('sensoren'))
 
@@ -366,13 +364,25 @@ def init_hardware():
         time.sleep(1)
         code = shared.lora.begin()
         if code == 1:
-            code, configuration = shared.lora.get_configuration()
-            print("ADDH:", hex(configuration.ADDH))
-            print("ADDL:", hex(configuration.ADDL))
-            shared.ADDH = configuration.ADDH
-            shared.ADDL = configuration.ADDL
+            for i in range(3):
+                try:
+                    code, configuration = shared.lora.get_configuration()
+                    print("ADDH:", hex(configuration.ADDH))
+                    print("ADDL:", hex(configuration.ADDL))
+                    shared.ADDH = configuration.ADDH
+                    shared.ADDL = configuration.ADDL
+                    break
+                except Exception as e:
+                    print("Fehler:", e)
+                    print("Versuch", i + 1, "von", 3)
+                    if i == 3 - 1: exit()
+            threading.Thread(target=manager2, daemon=False).start()
         else:
             print("?Fehler beim Starten von Lora")
+            shared.fehler += "Funksystem konnte nicht gestartet werden, Funk deaktiviert"
+            shared.current_freq = -10
+            shared.current_power = -10
+            shared.fehler2 += "1"
     else: return "404"
 
 def manager2():
@@ -400,7 +410,7 @@ def manager2():
         if shared.logger_service:
             a, b = shared.logger_data
             if datetime.now() - last_action > timedelta(minutes=int(a)):
-                sensor_logger()
+                sensor_logger(b)
                 last_action = datetime.now()
 def sound():
     buzzer.on()
@@ -432,10 +442,6 @@ if __name__ == '__main__':
         load_file()
     shared.ser = init_hardware()
     sound()
-    if  shared.ser == "404":
-        print("Fehler:Lora")
-        shared.fehler += "Funksystem konnte nicht gestartet werden, Funk deaktiviert"
-    else:threading.Thread(target=manager2, daemon=False).start()
     if os.path.exists('kontakt.csv'):
          with open("kontakt.csv", "r", encoding="utf-8") as f: shared.kontakte = list(csv.reader(f))
          print(shared.kontakte)
