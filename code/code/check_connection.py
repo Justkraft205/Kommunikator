@@ -71,13 +71,14 @@ def clock_update():
         else:return str(e)
 
 
-def server_anfrage(s_id, number):
+def server_anfrage(s_id, number, fixed):
     print(f"Server wird angefragt: s_id={s_id}, number={number}")
     # Anfrage senden
-    manager(1, s_id, f"{shared.myid}.{number}")
+    if fixed:message = f"fixed;{shared.myid}.{number}"
+    else:message = f"{shared.myid}.{number}"
+    manager(1, s_id, message)
     print("Warte auf Antwort...")
     print(datetime.now())
-
     # Antwort empfangen
     message, server_id = manager(2, shared.myid, "")
     print(f"Antwort erhalten: message={message}, server_id={server_id}")
@@ -148,14 +149,6 @@ def save_kontakt(name, nummer, addh, addl):
         writer.writerow(neue_zeile)
     print("Neue Zeile wurde hinzugefügt!")
 
-
-def get_last_number(kontakte, name):
-    if name is None:return None
-    target = name.strip().lower()
-    for kontakt in kontakte:
-        if kontakt and kontakt[0].strip().lower() == target:return kontakt[0], kontakt[-1]  # letzter Wert der gefundenden Unterliste
-    return None
-
 # I think kann gelöscht werden!!!!
 #def check_server():
 #    print("Versuche irgendtwie Server/Device zu erreichen")
@@ -206,9 +199,13 @@ def speichern(id3, nachricht, datei):
 
 def mes_empfangen(sender_id):
     print("Starte Empfang...")
+    print("sender_id:",sender_id)
     shared.manager_check = 2
-    while shared.thread_wait == False:
-        time.sleep(0.1)
+ #   while shared.thread_wait == False:
+  #      time.sleep(0.1)
+    print("Warte bis ")
+    if ";" in sender_id:
+        print(f"aktiviere fixed messages")
     manager(1, sender_id, "1")
     nachricht = ""
     fcount = 0
@@ -236,16 +233,29 @@ def mes_empfangen(sender_id):
             break
         else:manager(1, sender_id, "1")
 
+def get_last_number(kontakte, name):
+    if name is None:return None
+    target = name.strip().lower()
+    for kontakt in kontakte:
+        if kontakt and kontakt[0].strip().lower() == target:return kontakt[1], kontakt[-1]  # letzter Wert der gefundenden Unterliste
+    return None
+
 def mes_senden(option, text):
+    print(shared.lora)
+    if "1" in shared.fehler2:
+        return False
     shared.manager_check = 2
+    print(f"text: {text}, option: {option}")
     while shared.thread_wait == False:
         time.sleep(0.1)
     ziel, ziel2 = get_last_number(shared.kontakte, option)
-    if not ziel:
+    print(f"ziel: {ziel}, ziel2: {ziel2}")
+    if not ziel2:
         print("Kein Ziel gefunden.")
         return False
+    if not ziel: shared.fixed_message = False
     print(f"zieladresse:{ziel}, {ziel2}")
-    t, idk = server_anfrage(ziel,4)
+    t, idk = server_anfrage(ziel2,4, shared.fixed_message)
     if t != "1":
         print("Server antwortet nicht.")
         shared.manager_check = 0
@@ -276,11 +286,11 @@ def send_mes(nachricht, ziel, ziel2):
     print(f"Empofänger:{ziel}, {ziel2}")
     fcount = 0
     while fcount < 3:
-        if ziel2 == None:
-            manager(1, ziel, nachricht)
+        if shared.fixed_message:
+            ziell, zielh = ziel.split(":", 1)
+            manager(1, ziel2, nachricht, 1, ziell, zielh)
         else:
-            ziell, zielh = ziel2.split(":", 1)
-            manager(1, ziel, nachricht, 1, ziell, zielh)
+            manager(1, ziel2, nachricht)
         antwort, _ = manager(2, shared.myid, "")
         print(f"Antwort empfangen: {antwort}")
         if antwort == "1":
@@ -311,8 +321,12 @@ def manager(count,id2,text):
             elif count == 0:
                 if not shared.manager_check == 2:shared.manager_check = 0
             count = 0
+    else:
+        print("Wegen fehler abgebrochen")
 
 def change_frequenz(channel):
+    if "1" in shared.fehler2:
+        return False
     shared.manager_check = 2
     while shared.thread_wait == False:
         time.sleep(0.1)
@@ -334,6 +348,8 @@ def change_frequenz(channel):
     else:return False
 
 def change_power(power_dbm):
+    if "1" in shared.fehler2:
+        return False
     val = 99
     shared.manager_check = 2
     while shared.thread_wait == False:
@@ -368,9 +384,11 @@ def check_sensoren():
     print("Es werden angeschlossene Sensoren geprüft")
     t = restarting_i2c()
     if not t: print("Error")
-    check_i2c_devices(shared.sensors)
+    sensoren =check_i2c_devices(shared.sensors)
     print("ich bin stuck")
-    read_sensors()
+    ok = read_sensors(sensoren)
+    if not ok: print("Fehler beim sensor lesen")
+    shared.time_data = datetime.now().strftime("%H:%M")
     #if not check_one_wire(): shared.temp_c = 0
     #if not restart_i2c(1): return False, False, False
     #check_i2c_devices(shared.sensors)
@@ -438,14 +456,14 @@ def read_temp():
         temp_f = temp_c * 9.0 / 5.0 + 32.0
         return temp_c, temp_f
 
-def sensor_logger():
+def sensor_logger(file_name):
     global logger_counter
     logger_counter += 1
     print("Speichern")
     check_sensoren()
     if logger_counter == 1:
         header = shared.header + ["Uhrzeit"]
-        with open(f"logings/{shared.file_name}", "w", newline="", encoding="utf-8") as f:
+        with open(f"logings/{file_name}", "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(header)
     print("logger hat als rückgabe:", shared.sensor_data)
@@ -454,7 +472,7 @@ def sensor_logger():
         values.append(datetime.now().strftime("%H:%M"))
     else:
         values = list(shared.sensor_data)
-    with open(f"logings/{shared.file_name}", "a", newline="", encoding="utf-8") as f:
+    with open(f"logings/{file_name}", "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, delimiter=";")
         writer.writerow(values)
     shared.sensor_data.clear()
