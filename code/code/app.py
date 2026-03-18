@@ -330,6 +330,16 @@ def check_max17048(addr, bus):
     except OSError:
         return False
 
+def lora_default():
+    print("Schreibe default settings")
+    status, configuration = shared.lora.get_configuration()
+    if not status == 1: return False
+    configuration.ADDH = shared.ADDH
+    configuration.ADDL = shared.ADDL
+    configuration.CHAN = int(shared.current_freq)
+    status, confSet = shared.lora.set_configuration(configuration)
+    if not status == 1: return False
+    return True
 
 def init_hardware():
     global buzzer, powerp
@@ -359,16 +369,19 @@ def init_hardware():
     if e220_check():
         for i in range(3):
             try:
-                print("Es funktioniert")
-                time.sleep(0.1)
+                print("LORA wird initalisiert")
                 shared.ser = serial.Serial(port='/dev/serial0', baudrate=9600, timeout=1)
                 shared.lora = LoRaE220('900T22D', shared.ser, aux_pin=shared.aux_pin, m0_pin=shared.M0_PIN, m1_pin=shared.M1_PIN)
                 time.sleep(1)
                 code = shared.lora.begin()
                 if code == 1:
+                    print("LoRa wurde Initalisiert")
+                    if not lora_default():raise Exception("Fehler beim schreiben der Default Settings")
                     code, configuration = shared.lora.get_configuration()
                     print("ADDH:", hex(configuration.ADDH))
                     print("ADDL:", hex(configuration.ADDL))
+                    if not shared.ADDH == configuration.ADDH:raise Exception("Default Settings wurden nicht geschrieben")
+                    if not shared.ADDL == configuration.ADDL:raise Exception("Default Settings wurden nicht geschrieben")
                     shared.ADDH = configuration.ADDH
                     shared.ADDL = configuration.ADDL
                     threading.Thread(target=manager2, daemon=False).start()
@@ -377,6 +390,7 @@ def init_hardware():
                 print("Fehler:", e)
                 print("Versuch", i + 1, "von", 3)
                 shared.ser.close()
+                time.sleep(0.1)
                 if i == 3 - 1: lora_fehler()
     else:
         lora_fehler()
