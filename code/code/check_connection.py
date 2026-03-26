@@ -48,7 +48,7 @@ def take_wetter():
 
 def auswertung(message, server_id):
         teil1, teil2 = message.split(".")
-        print(f"{teil1}.{teil2}")
+        print(datetime.now())
         if teil2 == "4":mes_empfangen(teil1, server_id)
         elif teil2 == "3":clock_update()
         elif teil2 == "5":emp_new_kontakt(teil1)
@@ -113,7 +113,6 @@ def send_kontakt(name,ziel):
         shared.manager_check = 0
         return False
 
-
 def save_kontakt(name, nummer, addh, addl):
     print(f"Erstelle neuen Kontakt: {name}, {nummer}")
     neue_zeile = [name, f"{addh}:{addl}", nummer]
@@ -121,20 +120,6 @@ def save_kontakt(name, nummer, addh, addl):
         writer = csv.writer(datei)
         writer.writerow(neue_zeile)
     print("Neue Zeile wurde hinzugefügt!")
-
-# I think kann gelöscht werden!!!!
-#def check_server():
-#    print("Versuche irgendtwie Server/Device zu erreichen")
-#    manager(1,0,"40")
-#    t, idk = manager(2,shared.myid,"")
-#    if t == "10":
-#        print("Geklappt")
- #       print(idk)
-  #      return idk
-   # else:
-    #    print("Fehler")
-     #   return shared.fehler
-
 
 def finde_ersten_wert(datei, zid):
     with open(datei, "r", encoding="utf-8") as f:kontakte = list(csv.reader(f))
@@ -165,36 +150,24 @@ def speichern(id3, nachricht, datei):
     shared.notify2 = True
 
 def mes_empfangen(sender_id, fixed):
-    if shared.fixed_message:back = "f;1"
-    else:back = "1"
-    print(f"Starte Empfang:{sender_id}")
-    shared.manager_check = 2
-    manager(1, sender_id, back)
+    manager(1, sender_id, "1")
     nachricht = ""
     fcount = 0
     while True:
-        time.sleep(1)
-        print("Empfange Message")
         message, empid = manager(2, shared.myid, "")
-        print(f"sender_id:{sender_id}")
-        print(f"Empfangen: {message}")
         if not message or ":" not in message or message == "404":
-            print("Ungültige Nachricht, warte...")
             manager(1, sender_id, "2")
             fcount = fcount + 1
             continue
         if fcount >= 3:break
         schluessel, wert = message.split(":", 1)
         nachricht += wert
-        print(f"message: {message}, wert: {wert}, schluessel: {schluessel}")
         if schluessel == "end":
             speichern(sender_id, nachricht, "nachrichten.json")
-            time.sleep(0.5)
-            manager(1, sender_id, back)
+            manager(1, sender_id, "1")
             shared.nachricht = nachricht
-            shared.manager_check = 0
             break
-        else:manager(1, sender_id, back)
+        else:manager(1 , sender_id, "1")
 
 def get_last_number(kontakte, name):
     if name is None:return None
@@ -209,8 +182,7 @@ def get_last_number(kontakte, name):
 
 def server_anfrage(s_id, number):
     print(f"Server wird angefragt: s_id={s_id}, number={number}")
-    print(f"{shared.ADDH}, {shared.ADDL}")
-    if shared.fixed_message:message = f"f;{shared.ADDH}:{shared.ADDL}.{number}"
+    if shared.fixed_message:message = f"{shared.ADDH}:{shared.ADDL}.{number}"
     else:message = f"{shared.myid}.{number}"
     print(message)
     manager(1, s_id, message)
@@ -236,23 +208,19 @@ def mes_senden(option, text):
     if not id:return False
     t, idk = server_anfrage(id,4)
     if t != "1":
-        print("Server antwortet nicht.")
         shared.manager_check = 0
         return False
-    print(f"Server antwortet: {idk}, starte nachrichten übermittlung")
     teile = [text[i:i+12] for i in range(0, len(text), 12)]
     print(f"text:{text}, teile:{teile}")
     for i, t in enumerate(teile):
         teil_id = "end" if i == len(teile) - 1 else str(i)
-        nachricht = f"f;{teil_id}:{t}"
+        nachricht = f"{teil_id}:{t}"
         print(f"Sende: {nachricht}")
         antwort = send_mes(nachricht, id)
         if antwort == 1 or antwort == "1":
             print(f"Teil {i + 1}/{len(teile)} erfolgreich gesendet.")
             continue
-        elif antwort == "2":
-            print("Abbruch")
-            return False
+        elif antwort == "2":return False
         else:
             print("unbekannte antowrt ")
             break
