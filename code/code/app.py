@@ -5,9 +5,7 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify,re
 from gpiozero import Buzzer, OutputDevice
 from multiprocessing import Process
 from mpmath.libmp.libmpf import strict_normalize1
-from lora_e220 import LoRaE220
-from lora_e220 import LoRaE220, print_configuration
-from lora_e220_operation_constant import ResponseStatusCode
+from lora_e220 import *
 from datetime import datetime, timedelta
 from empfang import empfange_nachricht
 from empfang2 import empfang_normal
@@ -138,6 +136,8 @@ def set_strengh():
     strengh = request.form.get('strengh')
     if not strengh: return "Keine Auswahl getroffen!", 400
     else:
+        if "1" in shared.fehler2:
+            return "Lora funktioniert nicht", 400
         state = change_power(strengh)
         if not state:
             strengh = "Fehler beim Schreiben"
@@ -282,6 +282,19 @@ def request_kontakt():
         return jsonify({"ergebnis": result, "eingabe": text})
     return render_template("quest_kontakt.html")
 
+@app.route("/aus")
+def aus():
+    print("Code wird beendet")
+    shared.manager_check = 3
+    try:
+        shared.bus.close()
+    except:
+        pass
+    save_all()
+    import os
+    os._exit(0)
+    return "OK"
+
 #Initalisierung und main Thread-----------------------------------------------------------------------------------------
 
 def is_port_in_use(port):
@@ -293,7 +306,6 @@ def start_ttyd():
     global ttyd_process
     if not is_port_in_use(TTYD_PORT):
         ttyd_process = subprocess.Popen(TTYD_CMD)
-        # kurze Pause, damit ttyd starten kann
         time.sleep(1)
         print(f"ttyd gestartet auf Port {TTYD_PORT}")
     else:
@@ -327,15 +339,16 @@ def check_max17048(addr, bus):
     try:
         bus.read_byte(addr)
         return True
-    except OSError:
-        return False
+    except OSError: return False
 
 def lora_default():
     print("Schreibe default settings")
     status, configuration = shared.lora.get_configuration()
     if not status == 1: return False
+    configuration.TRANSMISSION_MODE.fixedTransmission = FixedTransmission.FIXED_TRANSMISSION
     configuration.ADDH = shared.ADDH
     configuration.ADDL = shared.ADDL
+    configuration.OPTION.transmissionPower = shared.current_power
     configuration.CHAN = int(shared.current_freq)
     status, confSet = shared.lora.set_configuration(configuration)
     if not status == 1: return False
@@ -344,23 +357,17 @@ def lora_default():
 def init_hardware():
     global buzzer, powerp
     try:
-        buzzer = Buzzer(16)
-    except Exception as e:
-        print(f"Buzzer konnte nicht initialisiert werden: {e}")
-        buzzer = None
-    try:
         powerp = OutputDevice(13)
+        buzzer = Buzzer(16)
     except Exception as e:
         print(f"Power konnte nicht initialisiert werden: {e}")
         powerp = None
-    print("Power wurde angeschaltet")
+        buzzer = None
     powerp.on()
-    i2c_bus = 1
-    device_adress = 0x36
-    shared.bus = smbus2.SMBus(i2c_bus)
-    if check_max17048(device_adress, shared.bus):
-        print("MAX17048 erkannt und antwortet auf I2C-Adresse 0x36!")
-        shared.i2c = board.I2C()  # SCL, SDA
+    shared.bus = smbus2.SMBus(1)
+    shared.i2c = board.I2C()
+    if check_max17048(0x36, shared.bus):
+        print("MAX17048 erkannt und antwortet auf I2C-Adresse 0x36!")  # SCL, SDA
         shared.max17048 = adafruit_max1704x.MAX17048(shared.i2c)
         check_battery()
     else:
@@ -372,25 +379,20 @@ def init_hardware():
                 print("LORA wird initalisiert")
                 shared.ser = serial.Serial(port='/dev/serial0', baudrate=9600, timeout=1)
                 shared.lora = LoRaE220('900T22D', shared.ser, aux_pin=shared.aux_pin, m0_pin=shared.M0_PIN, m1_pin=shared.M1_PIN)
-                time.sleep(1)
+                time.sleep(0.1)
                 code = shared.lora.begin()
                 if code == 1:
-                    print("LoRa wurde Initalisiert")
                     if not lora_default():raise Exception("Fehler beim schreiben der Default Settings")
                     code, configuration = shared.lora.get_configuration()
-                    print("ADDH:", hex(configuration.ADDH))
-                    print("ADDL:", hex(configuration.ADDL))
-                    if not shared.ADDH == configuration.ADDH:raise Exception("Default Settings wurden nicht geschrieben")
-                    if not shared.ADDL == configuration.ADDL:raise Exception("Default Settings wurden nicht geschrieben")
-                    shared.ADDH = configuration.ADDH
-                    shared.ADDL = configuration.ADDL
+                    if not shared.ADDH == configuration.ADDH:raise Exception("ADDH wurde nicht geschrieben")
+                    if not shared.ADDL == configuration.ADDL:raise Exception("ADDL wurde nicht geschrieben")
                     threading.Thread(target=manager2, daemon=False).start()
                     break
             except Exception as e:
                 print("Fehler:", e)
                 print("Versuch", i + 1, "von", 3)
                 shared.ser.close()
-                time.sleep(0.1)
+                time.sleep(1)
                 if i == 3 - 1: lora_fehler()
     else:
         lora_fehler()
@@ -407,29 +409,31 @@ def manager2():
     global last_reload, last_action
     print("manager2 gestartet")
     count =0
-    while True:
+    running = True
+    while running:
         if shared.manager_check == 0:
             shared.thread_wait = False
             count = count + 1
-            print(count)
             message, server_id = empfang_normal(shared.myid)
             print(f"mes:{message}, ser:{server_id}, manager2")
             if not message == "404" or None:check_connection.auswertung(message, server_id)
-            if count >= 30 and shared.battery_level != 0 and shared.battery_level!= -10 or shared.battery_level ==0.0:
-                print("check_battery")
-                count = 0
-                check_battery()
-            if shared.notify2:
-                shared.notify2 = False
-                thread2 = threading.Thread(target=sound, daemon=True)
-                thread2.start()
-        else:
-            shared.thread_wait = True
+        else:shared.thread_wait = True
+        if count >= 3 and shared.battery_level != 0 and shared.battery_level!= -10 or shared.battery_level ==0.0:
+            print("check_battery")
+            count = 0
+            check_battery()
+        if shared.notify2:
+            shared.notify2 = False
+            thread2 = threading.Thread(target=sound, daemon=True)
+            thread2.start()
         if shared.logger_service:
             a, b = shared.logger_data
             if datetime.now() - last_action > timedelta(minutes=int(a)):
                 sensor_logger(b)
                 last_action = datetime.now()
+        if shared.manager_check == 3:
+            running = False
+            shared.thread_wait = True
 def sound():
     buzzer.on()
     time.sleep(1)
@@ -441,6 +445,8 @@ def save_all():
         "sensors": shared.sensors,
         "current_power": shared.current_power,
         "current_freq": shared.current_freq,
+        "ADDH":shared.ADDH,
+        "ADDL":shared.ADDL
     }
     with open("variablen.pkl", "wb") as f:
         pickle.dump(variablen, f)
@@ -448,16 +454,11 @@ def save_all():
 
 def load_file():
     print("variablen werden geladen")
-    with open("variablen.pkl", "rb") as f:
-        geladene_variablen = pickle.load(f)
-    # Alle Variablen ins shared-Modul schreiben
-    for name, wert in geladene_variablen.items():
-        setattr(shared, name, wert)
-
+    with open("variablen.pkl", "rb") as f: geladene_variablen = pickle.load(f)
+    for name, wert in geladene_variablen.items():setattr(shared, name, wert)
 
 if __name__ == '__main__':
-    if os.path.exists('variablen.pkl'):
-        load_file()
+    if os.path.exists('variablen.pkl'):load_file()
     shared.ser = init_hardware()
     sound()
     if os.path.exists('kontakt.csv'):
