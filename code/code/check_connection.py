@@ -47,15 +47,11 @@ def take_wetter():
                         shared.shared_data["status"] = "12"
 
 def auswertung(message, server_id):
-        print("ich bin hier")
         teil1, teil2 = message.split(".")
         print(f"{teil1}.{teil2}")
-        if teil2 == "4":
-            mes_empfangen(teil1)
-        elif teil2 == "3":
-            clock_update()
-        elif teil2 == "5":
-            emp_new_kontakt(teil1)
+        if teil2 == "4":mes_empfangen(teil1, server_id)
+        elif teil2 == "3":clock_update()
+        elif teil2 == "5":emp_new_kontakt(teil1)
 # Muss geändert werden
 def clock_update():
     message, shared.server_id= server_anfrage(3)
@@ -69,29 +65,6 @@ def clock_update():
     except Exception as e:
         if hasattr(e, "stderr") and e.stderr: return e.stderr.strip()
         else:return str(e)
-
-
-def server_anfrage(s_id, number, fixed):
-    print(f"Server wird angefragt: s_id={s_id}, number={number}")
-    # Anfrage senden
-    if fixed:message = f"fixed;{shared.myid}.{number}"
-    else:message = f"{shared.myid}.{number}"
-    manager(1, s_id, message)
-    print("Warte auf Antwort...")
-    print(datetime.now())
-    # Antwort empfangen
-    message, server_id = manager(2, shared.myid, "")
-    print(f"Antwort erhalten: message={message}, server_id={server_id}")
-
-    # Fehlerbehandlung
-    if not message or message == "404" or server_id == "404":
-        print("Fehler: Keine gültige Antwort vom Server erhalten.")
-        return "404", "404"
-
-    # Erfolg
-    shared.server_id = server_id
-    return message, server_id
-
 
 def emp_new_kontakt(device_id):
     print("Empfange Kontakt")
@@ -163,25 +136,19 @@ def save_kontakt(name, nummer, addh, addl):
      #   return shared.fehler
 
 
-def finde_ersten_wert(datei, zielwert):
-    with open(datei, "r", encoding="utf-8") as f:
-        kontakte = list(csv.reader(f))
+def finde_ersten_wert(datei, zid):
+    with open(datei, "r", encoding="utf-8") as f:kontakte = list(csv.reader(f))
+    if ";" in zid:spalte = 1
+    else:spalte = 2
     for eintrag in kontakte:
-        # Prüfen, ob Zeile mindestens 2 Spalten hat
-        if len(eintrag) >= 2:
-            # Prüfen, ob der Zielwert in der letzten Spalte steht
-            if eintrag[-1] == zielwert:
-                return eintrag[0]
-    # Wenn nichts gefunden wird
+        if len(eintrag) == 3:
+            print(eintrag[spalte])
+            if eintrag[spalte] == zid:return eintrag[0]
     return None
-
 
 def speichern(id3, nachricht, datei):
     name = finde_ersten_wert("kontakt.csv", id3)
-    if name:print(f"Gefunden! Erste Spalte: {name}")
-    else:
-        print("Nicht in Kontakten vorhanden")
-        name = "Unbekannt"
+    if not name: name = "Unbekannt"
     if os.path.exists(datei):
         with open(datei, "r", encoding="utf-8") as f:
             daten = json.load(f)
@@ -197,16 +164,12 @@ def speichern(id3, nachricht, datei):
     shared.notify = True
     shared.notify2 = True
 
-def mes_empfangen(sender_id):
-    print("Starte Empfang...")
-    print("sender_id:",sender_id)
+def mes_empfangen(sender_id, fixed):
+    if shared.fixed_message:back = "f;1"
+    else:back = "1"
+    print(f"Starte Empfang:{sender_id}")
     shared.manager_check = 2
- #   while shared.thread_wait == False:
-  #      time.sleep(0.1)
-    print("Warte bis ")
-    if ";" in sender_id:
-        print(f"aktiviere fixed messages")
-    manager(1, sender_id, "1")
+    manager(1, sender_id, back)
     nachricht = ""
     fcount = 0
     while True:
@@ -227,35 +190,51 @@ def mes_empfangen(sender_id):
         if schluessel == "end":
             speichern(sender_id, nachricht, "nachrichten.json")
             time.sleep(0.5)
-            manager(1, sender_id, "1")
+            manager(1, sender_id, back)
             shared.nachricht = nachricht
             shared.manager_check = 0
             break
-        else:manager(1, sender_id, "1")
+        else:manager(1, sender_id, back)
 
 def get_last_number(kontakte, name):
     if name is None:return None
     target = name.strip().lower()
     for kontakt in kontakte:
-        if kontakt and kontakt[0].strip().lower() == target:return kontakt[1], kontakt[-1]  # letzter Wert der gefundenden Unterliste
+        if kontakt and kontakt[0].strip().lower() == target:
+            if kontakt[1] is None: shared.fixed_message = False
+            if shared.fixed_message:adress = kontakt[1]
+            else: adress = kontakt[-1]
+            return adress
     return None
 
+def server_anfrage(s_id, number):
+    print(f"Server wird angefragt: s_id={s_id}, number={number}")
+    print(f"{shared.ADDH}, {shared.ADDL}")
+    if shared.fixed_message:message = f"f;{shared.ADDH}:{shared.ADDL}.{number}"
+    else:message = f"{shared.myid}.{number}"
+    print(message)
+    manager(1, s_id, message)
+    print(f"Warte auf Antwort...:{datetime.now()}")
+    message, server_id = manager(2, shared.myid, "")
+    print(f"Antwort erhalten: message={message}, server_id={server_id}")
+    if not message or message == "404" or server_id == "404":
+        print("Fehler: Keine gültige Antwort vom Server erhalten.")
+        return "404", "404"
+    shared.server_id = server_id
+    return message, server_id
+
 def mes_senden(option, text):
-    print(shared.lora)
-    if "1" in shared.fehler2:
-        return False
+    if "1" in shared.fehler2:return False
     shared.manager_check = 2
-    print(f"text: {text}, option: {option}")
-    while shared.thread_wait == False:
+    c = 0
+    while not shared.thread_wait:
         time.sleep(0.1)
-    ziel, ziel2 = get_last_number(shared.kontakte, option)
-    print(f"ziel: {ziel}, ziel2: {ziel2}")
-    if not ziel2:
-        print("Kein Ziel gefunden.")
-        return False
-    if not ziel: shared.fixed_message = False
-    print(f"zieladresse:{ziel}, {ziel2}")
-    t, idk = server_anfrage(ziel2,4, shared.fixed_message)
+        c+=1
+        if c >= 101:return False
+    id = get_last_number(shared.kontakte, option)
+    print(f"ziel: {id}")
+    if not id:return False
+    t, idk = server_anfrage(id,4)
     if t != "1":
         print("Server antwortet nicht.")
         shared.manager_check = 0
@@ -265,9 +244,9 @@ def mes_senden(option, text):
     print(f"text:{text}, teile:{teile}")
     for i, t in enumerate(teile):
         teil_id = "end" if i == len(teile) - 1 else str(i)
-        nachricht = f"{teil_id}:{t}"
+        nachricht = f"f;{teil_id}:{t}"
         print(f"Sende: {nachricht}")
-        antwort = send_mes(nachricht, ziel, ziel2)
+        antwort = send_mes(nachricht, id)
         if antwort == 1 or antwort == "1":
             print(f"Teil {i + 1}/{len(teile)} erfolgreich gesendet.")
             continue
@@ -281,16 +260,11 @@ def mes_senden(option, text):
     speichern(shared.myid, text,"nachrichten.json")
     return True
 
-def send_mes(nachricht, ziel, ziel2):
-    print("Nachricht wird gesendet:", nachricht)
-    print(f"Empofänger:{ziel}, {ziel2}")
+def send_mes(nachricht, ziel):
+    print(f"Nachricht: {nachricht}, ziel: {ziel}")
     fcount = 0
     while fcount < 3:
-        if shared.fixed_message:
-            ziell, zielh = ziel.split(":", 1)
-            manager(1, ziel2, nachricht, 1, ziell, zielh)
-        else:
-            manager(1, ziel2, nachricht)
+        manager(1, ziel, nachricht)
         antwort, _ = manager(2, shared.myid, "")
         print(f"Antwort empfangen: {antwort}")
         if antwort == "1":
@@ -312,9 +286,9 @@ def manager(count,id2,text):
         print(datetime.now())
         for i in range(2):
             if count == 1:
-                senden(id2, text)
+                senden(id2, text, shared.current_freq)
             elif count == 2:
-                message, server_id = empfange_nachricht(shared.myid)
+                message, server_id = empfange_nachricht(shared.myid, shared.fixed_message)
                 print(datetime.now())
                 print(f"Nachricht Empfangem.Message: {message},server_id:{server_id}")
                 return message, server_id
@@ -325,11 +299,9 @@ def manager(count,id2,text):
         print("Wegen fehler abgebrochen")
 
 def change_frequenz(channel):
-    if "1" in shared.fehler2:
-        return False
+    if "1" in shared.fehler2:return False
     shared.manager_check = 2
-    while shared.thread_wait == False:
-        time.sleep(0.1)
+    while shared.thread_wait == False:time.sleep(0.1)
     channel = int(channel)
     status, configuration = shared.lora.get_configuration()
     if not status == 1: return False
@@ -348,12 +320,8 @@ def change_frequenz(channel):
     else:return False
 
 def change_power(power_dbm):
-    if "1" in shared.fehler2:
-        return False
-    val = 99
     shared.manager_check = 2
-    while shared.thread_wait == False:
-        time.sleep(0.1)
+    while shared.thread_wait == False:time.sleep(0.1)
     print(f"?? Ändere Sendeleistung auf {power_dbm} dBm")
     if power_dbm == "22": val = 0
     elif power_dbm == "17": val = 1
@@ -365,7 +333,7 @@ def change_power(power_dbm):
     conf.OPTION.transmissionPower = val
     status, _ = shared.lora.set_configuration(conf)
     if status != 1:return False
-    time.sleep(1)
+    time.sleep(0.1)
     status, conf2 = shared.lora.get_configuration()
     if status != 1:return False
     if conf2.OPTION.transmissionPower == val:
