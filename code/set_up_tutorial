@@ -8,7 +8,7 @@ Tutorial:
             -pytz: pip install pytz --break-system-packages
             -timezonefinder:
             -serial
-            -board
+            -board: sudo pip3 install adafruit-blinka smbus2 --break-system-packages
             -gpiozero:
             -smbus2
             -mpmath.limp.libmpf:pip3 install "mpmath==1.3.0" --break-system-packages
