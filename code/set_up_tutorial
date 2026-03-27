@@ -3,7 +3,7 @@ Its functionating out of the boxwith this sorts of sensors: Max17048, DS18B20, E
 
 Tutorial:
   1.Install all Python Libarys:
-            -adafruit_max1704x:sudo pip3 install adafruit-circuitpython-max1704x
+            -adafruit_max1704x:sudo pip3 install adafruit-circuitpython-max1704x --break-system-packages
             -json:
             -pytz: pip install pytz --break-system-packages
             -timezonefinder:
