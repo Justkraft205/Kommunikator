@@ -2,11 +2,12 @@
 M1_PIN = 23
 M0_PIN = 24
 aux_pin = 25
-lora = None
-current_power = 13
+current_power = 10
 current_freq = 18
-ADDH = None
-ADDL = None
+ADDH = 0
+ADDL = 1
+lora = None
+fixed_message = True
 #Sensoren:--------------------------------------------------------------------------------------------------------------
 skalas = "°C,z,hpa,y,%,x"
 bus = None
@@ -22,7 +23,7 @@ sensors = [
     ]
 i2c = None
 sensor_data = {}
-battery_level = 0
+battery_level = 0.0
 wert = ""
 kontakte = []
 send = ""
@@ -45,7 +46,6 @@ hoehe = "??"
 state = True
 myid = "7979173"
 myname = "Pi2"
-fixed_message = False
 ser = None
 cords =""
 server_id = ""
@@ -66,3 +66,4 @@ status = {
     'label3': 'Bereit'
 }
 celsius = True
+main_path = "/home/pi/code/"
