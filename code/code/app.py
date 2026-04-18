@@ -3,7 +3,6 @@ import shared, threading, check_connection, time, serial, json, ast, logging, cs
 import socket, subprocess
 from flask import Flask, render_template, request, redirect, url_for, jsonify,render_template_string
 from gpiozero import Buzzer, OutputDevice
-from multiprocessing import Process
 from mpmath.libmp.libmpf import strict_normalize1
 from lora_e220 import *
 from datetime import datetime, timedelta
@@ -19,8 +18,10 @@ DATEI = "nachrichten.json"
 last_reload = datetime.now()
 TTYD_PORT = 8787
 last_action = datetime.now()
-TTYD_CMD = ["ttyd", "--writable", "-p", str(TTYD_PORT), "-i", "0.0.0.0", "bash"]
+TTYD_CMD = ["/usr/bin/ttyd", "--writable", "-p", str(TTYD_PORT), "-i", "0.0.0.0", "/bin/bash"]
 ttyd_process = None
+powerp = None
+buzzer = None
 app = Flask(__name__)
 #------------------------------Rendering--------------------------------------------------------------------------------
 @app.before_request
@@ -52,14 +53,12 @@ def wetter(): return render_template("wetter.html",wetterdaten=shared.wetterdate
 @app.route('/terminal')
 def terminal():
     start_ttyd()
-    print(shared.battery_level)
     return render_template("terminal.html", battery_level=shared.battery_level)
 
 @app.route("/mesange", methods=["GET", "POST"])
 def mesange():
     auswahl = wert = None
     nachrichten = None
-    print(shared.fehler)
     zeilen = []
     return render_template("message.html",optionen=shared.optionen,auswahl=auswahl,status=shared.fehler,wert=wert,nachrichten=nachrichten,zeilen=zeilen, freq = shared.current_freq)
 
@@ -68,7 +67,7 @@ def sensoren():
     if shared.logger_data:
         print(shared.last_file)
         if not shared.last_file == None:
-            with open(f"logings/{shared.last_file}", newline='', encoding='utf-8') as csvfile:
+            with open(f"{shared.main_path}logings/{shared.last_file}", newline='', encoding='utf-8') as csvfile:
                 reader = csv.reader(csvfile, delimiter=';')
                 data = list(reader)
         else: data = None
@@ -295,6 +294,11 @@ def aus():
     os._exit(0)
     return "OK"
 
+@app.route("/funk_restart")
+def funk_restart():
+    start_funk()
+    return redirect("/")
+
 #Initalisierung und main Thread-----------------------------------------------------------------------------------------
 
 def is_port_in_use(port):
@@ -314,7 +318,7 @@ def start_ttyd():
 def check_battery():
     voltage = round(shared.max17048.cell_voltage, 2)
     shared.battery_level = round(shared.max17048.cell_percent, 1)
-    shared.battery_level= shared.battery_level + 5
+    shared.battery_level= shared.battery_level
     print(f"Spannung: {voltage:.2f} V, Ladezustand: {shared.battery_level:.1f} %")
     if shared.battery_level == 0.0:
         print(f"Spannung: {shared.battery_level:.1f} %")
@@ -325,11 +329,14 @@ def check_battery():
 
 def e220_check():
     try:
+        time.sleep(3)
         uart = serial.Serial(port="/dev/serial0",baudrate=9600, timeout=1)
         lora = LoRaE220('900T22D', uart)
         code = lora.begin()
         print("Init-Antwort:", ResponseStatusCode.get_description(code))
-        if code == ResponseStatusCode.SUCCESS:return True
+        if code == ResponseStatusCode.SUCCESS:
+            uart.close()
+            return True
         else:return False
     except Exception as e:
         print(f"Fehler beim Zugriff auf E220: {e}")
@@ -357,13 +364,13 @@ def lora_default():
 def init_hardware():
     global buzzer, powerp
     try:
-        powerp = OutputDevice(13)
-        buzzer = Buzzer(16)
+        powerp = OutputDevice(17)
+        buzzer = Buzzer(8)
+        powerp.on()
     except Exception as e:
         print(f"Power konnte nicht initialisiert werden: {e}")
         powerp = None
         buzzer = None
-    powerp.on()
     shared.bus = smbus2.SMBus(1)
     shared.i2c = board.I2C()
     if check_max17048(0x36, shared.bus):
@@ -374,29 +381,33 @@ def init_hardware():
         shared.battery_level = -10
         shared.fehler += "Battery Ladestand konnte nicht gelesen werden"
     if e220_check():
-        for i in range(3):
-            try:
-                print("LORA wird initalisiert")
-                shared.ser = serial.Serial(port='/dev/serial0', baudrate=9600, timeout=1)
-                shared.lora = LoRaE220('900T22D', shared.ser, aux_pin=shared.aux_pin, m0_pin=shared.M0_PIN, m1_pin=shared.M1_PIN)
-                time.sleep(0.1)
-                code = shared.lora.begin()
-                if code == 1:
-                    if not lora_default():raise Exception("Fehler beim schreiben der Default Settings")
-                    code, configuration = shared.lora.get_configuration()
-                    if not shared.ADDH == configuration.ADDH:raise Exception("ADDH wurde nicht geschrieben")
-                    if not shared.ADDL == configuration.ADDL:raise Exception("ADDL wurde nicht geschrieben")
-                    threading.Thread(target=manager2, daemon=False).start()
-                    break
-            except Exception as e:
-                print("Fehler:", e)
-                print("Versuch", i + 1, "von", 3)
-                shared.ser.close()
-                time.sleep(1)
-                if i == 3 - 1: lora_fehler()
+        start_funk()
     else:
         lora_fehler()
         return "404"
+
+def start_funk():
+    for i in range(3):
+        try:
+            print("LORA wird initalisiert")
+            shared.ser = serial.Serial(port='/dev/serial0', baudrate=9600, timeout=1)
+            shared.lora = LoRaE220('900T22D', shared.ser, aux_pin=shared.aux_pin, m0_pin=shared.M0_PIN,m1_pin=shared.M1_PIN)
+            time.sleep(0.1)
+            code = shared.lora.begin()
+            print(code)
+            if code == 1:
+                if not lora_default(): raise Exception("Fehler beim schreiben der Default Settings")
+                code, configuration = shared.lora.get_configuration()
+                if not shared.ADDH == configuration.ADDH: raise Exception("ADDH wurde nicht geschrieben")
+                if not shared.ADDL == configuration.ADDL: raise Exception("ADDL wurde nicht geschrieben")
+                threading.Thread(target=manager2, daemon=False).start()
+                return True
+            else:raise Exception("LoRa Init fehlgeschlagen")
+        except Exception as e:
+            print(e)
+            #shared.ser.close()
+            time.sleep(1)
+            if i == 3 - 1: lora_fehler()
 
 def lora_fehler():
     print("?Fehler beim Starten von Lora")
@@ -409,6 +420,7 @@ def manager2():
     global last_reload, last_action
     print("manager2 gestartet")
     count =0
+    last_time = time.time()
     running = True
     while running:
         if shared.manager_check == 0:
@@ -418,9 +430,8 @@ def manager2():
             print(f"mes:{message}, ser:{server_id}, manager2")
             if not message == "404" or None:check_connection.auswertung(message, server_id)
         else:shared.thread_wait = True
-        if count >= 3 and shared.battery_level != 0 and shared.battery_level!= -10 or shared.battery_level ==0.0:
-            print("check_battery")
-            count = 0
+        if time.time() - last_time >= 120 and shared.battery_level != 0 and shared.battery_level != -10 or shared.battery_level == 0.0:
+            last_time = time.time()
             check_battery()
         if shared.notify2:
             shared.notify2 = False
@@ -448,25 +459,23 @@ def save_all():
         "ADDH":shared.ADDH,
         "ADDL":shared.ADDL
     }
-    with open("variablen.pkl", "wb") as f:
+    with open(f"{shared.main_path}variablen.pkl", "wb") as f:
         pickle.dump(variablen, f)
     print("Alles wichtige wurde gespeichert")
 
 def load_file():
     print("variablen werden geladen")
-    with open("variablen.pkl", "rb") as f: geladene_variablen = pickle.load(f)
+    with open(f"{shared.main_path}variablen.pkl", "rb") as f: geladene_variablen = pickle.load(f)
     for name, wert in geladene_variablen.items():setattr(shared, name, wert)
 
 if __name__ == '__main__':
-    if os.path.exists('variablen.pkl'):load_file()
+    if os.path.exists(f'{shared.main_path}variablen.pkl'):load_file()
     shared.ser = init_hardware()
     sound()
-    if os.path.exists('kontakt.csv'):
-         with open("kontakt.csv", "r", encoding="utf-8") as f: shared.kontakte = list(csv.reader(f))
+    if os.path.exists(f'{shared.main_path}kontakt.csv'):
+         with open(f"{shared.main_path}kontakt.csv", "r", encoding="utf-8") as f: shared.kontakte = list(csv.reader(f))
          print(shared.kontakte)
          for eintrag in shared.kontakte:
              if len(eintrag) > 2: shared.optionen[eintrag[0]] = eintrag[len(eintrag) // 2]
-    else:
-        print(f"Keine Kontakte:SAD SMILE")
     #logging.getLogger('werkzeug').disabled = True
     app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
