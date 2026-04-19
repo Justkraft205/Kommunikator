@@ -25,4 +25,31 @@ echo "ttyd Installiert"
 sudo raspi-config nonint do_i2c 0
 sudo raspi-config nonint do_serial 0  # UART aktivieren
 sudo raspi-config nonint do_onewire 0
+SERVICE_NAME=myapp
+SCRIPT_PATH=/home/pi/code/app.py
+echo "Erstelle systemd Service..."
+sudo bash -c "cat > /etc/systemd/system/$SERVICE_NAME.service" <<EOF
+[Unit]
+Description=LoRa App
+After=network.target
+
+[Service]
+ExecStartPre=/bin/sleep 10
+ExecStart=/usr/bin/python3 /home/pi/code/app.py
+WorkingDirectory=/home/pi/code
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+User=pi
+
+[Install]
+WantedBy=multi-user.target
+EOF
+echo "Aktiviere Service..."
+sudo systemctl daemon-reexec
+sudo systemctl daemon-reload
+sudo systemctl enable $SERVICE_NAME
+
+echo "Starte Service..."
+sudo systemctl start $SERVICE_NAME
 echo "Fertig!"
