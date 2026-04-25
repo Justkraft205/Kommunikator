@@ -152,7 +152,7 @@ def set_skala():
         state = change_skalen(skala)
         if not state:
             state = "Fehler beim ändern"
-            return f"<h2><em>{skala}</em></h2><a href='{url_for('settings')}'>Zurück</a>"
+            return f"<h1>{state}</h1><h2><em>{skala}</em></h2><a href='{url_for('settings')}'>Zurück</a>"
         else:
             return redirect(url_for('settings'))
 
@@ -285,14 +285,10 @@ def request_kontakt():
 def aus():
     print("Code wird beendet")
     shared.manager_check = 3
-    try:
-        shared.bus.close()
-    except:
-        pass
+    try:shared.bus.close()
+    except:pass
     save_all()
-    import os
-    os._exit(0)
-    return "OK"
+    os.system("sudo shutdown -h now")
 
 @app.route("/funk_restart")
 def funk_restart():
@@ -302,7 +298,6 @@ def funk_restart():
 #Initalisierung und main Thread-----------------------------------------------------------------------------------------
 
 def is_port_in_use(port):
-    """Prüft, ob ein Port bereits belegt ist."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("0.0.0.0", port)) == 0
 
@@ -311,21 +306,22 @@ def start_ttyd():
     if not is_port_in_use(TTYD_PORT):
         ttyd_process = subprocess.Popen(TTYD_CMD)
         time.sleep(1)
-        print(f"ttyd gestartet auf Port {TTYD_PORT}")
-    else:
-        print(f"ttyd läuft bereits auf Port {TTYD_PORT}")
 
 def check_battery():
-    voltage = round(shared.max17048.cell_voltage, 2)
-    shared.battery_level = round(shared.max17048.cell_percent, 1)
-    shared.battery_level= shared.battery_level
-    print(f"Spannung: {voltage:.2f} V, Ladezustand: {shared.battery_level:.1f} %")
-    if shared.battery_level == 0.0:
-        print(f"Spannung: {shared.battery_level:.1f} %")
-    elif shared.battery_level < 5:
-        print("to low battery please shutdown")
-        #os.system("sudo shutdown -h now")
-
+    for i in range(3):
+        try:
+            voltage = round(shared.max17048.cell_voltage, 2)
+            shared.battery_level = round(shared.max17048.cell_percent, 1)
+            print(f"Spannung: {voltage:.2f} V, Ladezustand: {shared.battery_level:.1f} %")
+            if shared.battery_level == 0.0: raise Exception("Keine Spannung gemessen")
+            elif shared.battery_level < 1:
+                sound()
+                sound()
+                os.system("sudo shutdown -h now")
+            return True
+        except Exception as e:
+            time.sleep(0.5)
+            if i == 3 - 1: return False
 
 def e220_check():
     try:
@@ -367,16 +363,15 @@ def init_hardware():
         powerp = OutputDevice(17)
         buzzer = Buzzer(8)
         powerp.on()
-    except Exception as e:
-        print(f"Power konnte nicht initialisiert werden: {e}")
-        powerp = None
-        buzzer = None
+        sound()
+    except Exception as e:os.system("sudo shutdown -h now")
     shared.bus = smbus2.SMBus(1)
     shared.i2c = board.I2C()
     if check_max17048(0x36, shared.bus):
-        print("MAX17048 erkannt und antwortet auf I2C-Adresse 0x36!")  # SCL, SDA
         shared.max17048 = adafruit_max1704x.MAX17048(shared.i2c)
-        check_battery()
+        if not check_battery():
+            shared.battery_level = -10
+            shared.fehler += "Battery Ladestand konnte nicht gelesen werden"
     else:
         shared.battery_level = -10
         shared.fehler += "Battery Ladestand konnte nicht gelesen werden"
@@ -384,7 +379,9 @@ def init_hardware():
         start_funk()
     else:
         lora_fehler()
-        return "404"
+        shared.manager_check = 2
+    threading.Thread(target=manager2, daemon=False).start()
+    return "T"
 
 def start_funk():
     for i in range(3):
@@ -400,7 +397,8 @@ def start_funk():
                 code, configuration = shared.lora.get_configuration()
                 if not shared.ADDH == configuration.ADDH: raise Exception("ADDH wurde nicht geschrieben")
                 if not shared.ADDL == configuration.ADDL: raise Exception("ADDL wurde nicht geschrieben")
-                threading.Thread(target=manager2, daemon=False).start()
+                if "Funksystem konnte nicht gestartet werden, Funk deaktiviert" in shared.fehler:
+                    shared.fehler = shared.fehler.replace("Funksystem konnte nicht gestartet werden, Funk deaktiviert", "")
                 return True
             else:raise Exception("LoRa Init fehlgeschlagen")
         except Exception as e:
@@ -411,7 +409,8 @@ def start_funk():
 
 def lora_fehler():
     print("?Fehler beim Starten von Lora")
-    shared.fehler += "Funksystem konnte nicht gestartet werden, Funk deaktiviert"
+    fmessage = "Funksystem konnte nicht gestartet werden, Funk deaktiviert"
+    if not fmessage in shared.fehler: shared.fehler += fmessage
     shared.current_freq = -10
     shared.current_power = -10
     shared.fehler2 += "1"
@@ -451,16 +450,16 @@ def sound():
     buzzer.off()
 
 def save_all():
-    variablen = {
-        "skalas": shared.skalas,
-        "sensors": shared.sensors,
-        "current_power": shared.current_power,
-        "current_freq": shared.current_freq,
-        "ADDH":shared.ADDH,
-        "ADDL":shared.ADDL
-    }
+    with open(f"{shared.main_path}variablen.pkl", "rb") as f:
+        data = pickle.load(f)
+    if not shared.ADDH == -10:data["ADDH"] = shared.ADDH
+    if not shared.ADDL == -10:data["ADDL"] = shared.ADDL
+    if not shared.current_freq == -10:data["current_freq"] = shared.current_freq
+    if not shared.current_power == -10:data["current_power"] = shared.current_power
+    data["skalas"] = shared.skalas
+    data["sensors"] = shared.sensors
     with open(f"{shared.main_path}variablen.pkl", "wb") as f:
-        pickle.dump(variablen, f)
+        pickle.dump(data, f)
     print("Alles wichtige wurde gespeichert")
 
 def load_file():
@@ -470,8 +469,7 @@ def load_file():
 
 if __name__ == '__main__':
     if os.path.exists(f'{shared.main_path}variablen.pkl'):load_file()
-    shared.ser = init_hardware()
-    sound()
+    init_hardware()
     if os.path.exists(f'{shared.main_path}kontakt.csv'):
          with open(f"{shared.main_path}kontakt.csv", "r", encoding="utf-8") as f: shared.kontakte = list(csv.reader(f))
          print(shared.kontakte)
