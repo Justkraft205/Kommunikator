@@ -281,6 +281,12 @@ def request_kontakt():
         return jsonify({"ergebnis": result, "eingabe": text})
     return render_template("quest_kontakt.html")
 
+@app.route("/kill")
+def kill():
+    os.system("sudo systemctl restart myapp.service")
+    return redirect("/")
+
+
 @app.route("/aus")
 def aus():
     print("Code wird beendet")
@@ -384,6 +390,11 @@ def init_hardware():
     return "T"
 
 def start_funk():
+    i = 0
+    shared.manager_check = 2
+    print(shared.thread_wait)
+    while shared.thread_wait == False:
+        time.sleep(0.1)
     for i in range(3):
         try:
             print("LORA wird initalisiert")
@@ -399,13 +410,22 @@ def start_funk():
                 if not shared.ADDL == configuration.ADDL: raise Exception("ADDL wurde nicht geschrieben")
                 if "Funksystem konnte nicht gestartet werden, Funk deaktiviert" in shared.fehler:
                     shared.fehler = shared.fehler.replace("Funksystem konnte nicht gestartet werden, Funk deaktiviert", "")
+                shared.manager_check = 0
                 return True
             else:raise Exception("LoRa Init fehlgeschlagen")
         except Exception as e:
             print(e)
-            #shared.ser.close()
+
+            try:
+                shared.ser.close()
+                print("wurde geschlossen")
+            except:
+                pass
+
             time.sleep(1)
-            if i == 3 - 1: lora_fehler()
+
+            if i == 3 - 1:
+                lora_fehler()
 
 def lora_fehler():
     print("?Fehler beim Starten von Lora")
@@ -450,6 +470,10 @@ def sound():
     buzzer.off()
 
 def save_all():
+    if not os.path.exists(f"{shared.main_path}variablen.pkl"):
+        with open(f"{shared.main_path}variablen.pkl", "wb") as f:
+            pickle.dump({}, f)
+
     with open(f"{shared.main_path}variablen.pkl", "rb") as f:
         data = pickle.load(f)
     if not shared.ADDH == -10:data["ADDH"] = shared.ADDH
@@ -465,7 +489,9 @@ def save_all():
 def load_file():
     print("variablen werden geladen")
     with open(f"{shared.main_path}variablen.pkl", "rb") as f: geladene_variablen = pickle.load(f)
-    for name, wert in geladene_variablen.items():setattr(shared, name, wert)
+    for name, wert in geladene_variablen.items():
+        print(f"name:{name}: wert:{wert}")
+        setattr(shared, name, wert)
 
 if __name__ == '__main__':
     if os.path.exists(f'{shared.main_path}variablen.pkl'):load_file()
