@@ -18,10 +18,15 @@ DATEI = "nachrichten.json"
 last_reload = datetime.now()
 TTYD_PORT = 8787
 last_action = datetime.now()
-TTYD_CMD = ["/usr/bin/ttyd", "--writable", "-p", str(TTYD_PORT), "-i", "0.0.0.0", "/bin/bash"]
+TTYD_CMD = ["/usr/local/bin/ttyd", "--writable", "-p", str(TTYD_PORT), "-i", "0.0.0.0", "/bin/bash"]
 ttyd_process = None
 powerp = None
 buzzer = None
+#für die neue Messanger page-----------------------------------
+alter_chat = {}
+aktiver_chat = ""
+
+#--------------------------------------
 app = Flask(__name__)
 #------------------------------Rendering--------------------------------------------------------------------------------
 @app.before_request
@@ -35,6 +40,33 @@ def index():
     clock = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     shared.logger_data = False
     return render_template('index.html',status=shared.fehler,height = shared.hoehe,text=shared.long,strength=shared.setWifiStrength,text2=shared.lat,startzeit_js=clock,battery_level=shared.battery_level,notify = shared.notify,device =shared.send)
+
+
+@app.route("/messenger", methods=["POST", "GET"])
+def messenger():
+    global aktiver_chat
+    kontakt = request.args.get("kontakt")
+    print(f"ak: {aktiver_chat}")
+    for i, (name, text, datum) in enumerate(shared.kontakte2):
+        if name == kontakt:
+            if kontakt not in shared.chats:shared.chats[kontakt] = []
+            nachrichten = shared.chats.get(kontakt, [])
+            if nachrichten:
+                letzte = nachrichten[-1]
+                if len(letzte[1]) >= 9:neu = letzte[1][:9]
+                else:neu = letzte[1]
+                letzte_nachricht = f"{letzte[0]}:{neu}"
+            else:letzte_nachricht = "Keine Nachricht"
+            shared.kontakte2[i] = (name, letzte_nachricht, datum)
+    nachrichten_chat = shared.chats.get(kontakt, [])
+    return render_template(
+        "message_neu.html",
+        zeilen_chat=nachrichten_chat,
+        zeilen_links=shared.kontakte2,
+        aktiver_chat=kontakt,
+        freq=shared.current_freq
+    )
+
 
 @app.route('/new_kontakt')
 def new_kontakt():return render_template('new_kontakt.html')
@@ -77,8 +109,8 @@ def sensoren():
                                logger_active=shared.logger_service, logger_data_check=shared.logger_data2, data = None)
 
 #Routen-----------------------------------------------------------------------------------------------------------------
-@app.route('/check_message')
-def check_message():
+@app.route('/check_message2')
+def check_message2():
     if os.path.exists(message_path):
         with open(message_path, "r", encoding="utf-8") as fg:
             datas = json.load(fg)
@@ -245,20 +277,6 @@ def st_logger():
         shared.logger_service = True
     return redirect(url_for('sensoren'))
 
-@app.route("/send_message", methods=["POST"])
-def send_message():
-    shared.fehler = ""
-    option = request.form.get("optionen")
-    neue_option = request.form.get("neue_option")
-    if shared.ser == "404":
-        shared.fehler = 404
-    else:
-        status = mes_senden(option, neue_option)
-        if not status:
-            print(f"Hat nicht geklappt")
-            shared.fehler = 404
-    return redirect("/mesange")
-
 @app.route('/notify-closed', methods=['POST'])
 def notify_closed():
     shared.notify = False
@@ -300,6 +318,67 @@ def aus():
 def funk_restart():
     start_funk()
     return redirect("/")
+
+@app.route("/send_message2", methods=["POST"])
+def send_message2():
+    shared.fehler = ""
+    option = request.form.get("optionen")
+    neue_option = request.form.get("neue_option")
+    if shared.ser == "404":
+        shared.fehler = 404
+    else:
+        status = mes_senden(option, neue_option)
+        if not status:
+            print(f"Hat nicht geklappt")
+            shared.fehler = 404
+    return redirect("/mesange")
+
+@app.route("/send_message", methods=["POST"])
+def send_message():
+    global aktiver_chat
+    shared.fehler = ""
+    msg = request.form.get("neue_option")
+    print(msg)
+    print(aktiver_chat)
+    if not aktiver_chat == "":
+        print(f"Nachricht wird gesendet an:{aktiver_chat}, mit Nachricht: {msg}")
+        if not msg or aktiver_chat not in shared.chats:return redirect(url_for("messenger"))
+        if shared.ser == "404":
+            shared.fehler = 404
+        else:
+            status = mes_senden(aktiver_chat, msg)
+            if not status:
+                print(f"Hat nicht geklappt")
+                shared.fehler = 404
+                return redirect(url_for("messenger", kontakt=aktiver_chat))
+        datum = datetime.now().strftime("%Y-%m-%d %H:%M")
+        shared.chats[aktiver_chat].append(("Ich", msg, datum))
+    return redirect(url_for("messenger", kontakt=aktiver_chat))
+
+@app.route("/check_message")
+def check_message():
+    def build_table(data):
+        html = ""
+        for name, nachricht, datum in data:
+            html += f"""
+            <tr>
+                <td>{name}</td>
+                <td>{nachricht}</td>
+                <td>{datum}</td>
+            </tr>
+            """
+        return html
+    return jsonify({
+        "nachricht": "Update",
+        "tabelle_rechts": build_table(shared.chats),
+        "tabelle_links": build_table(shared.kontakte2)
+    })
+
+@app.route("/load_messages", methods=["POST"])
+def load_messages():
+    global aktiver_chat
+    aktiver_chat = request.form.get("con_name")
+    return redirect(url_for("messenger", kontakt=aktiver_chat))
 
 #Initalisierung und main Thread-----------------------------------------------------------------------------------------
 
@@ -355,8 +434,8 @@ def lora_default():
     status, configuration = shared.lora.get_configuration()
     if not status == 1: return False
     configuration.TRANSMISSION_MODE.fixedTransmission = FixedTransmission.FIXED_TRANSMISSION
-    configuration.ADDH = shared.ADDH
-    configuration.ADDL = shared.ADDL
+    configuration.ADDH = int(shared.ADDH)
+    configuration.ADDL = int(shared.ADDL)
     configuration.OPTION.transmissionPower = shared.current_power
     configuration.CHAN = int(shared.current_freq)
     status, confSet = shared.lora.set_configuration(configuration)
@@ -406,8 +485,8 @@ def start_funk():
             if code == 1:
                 if not lora_default(): raise Exception("Fehler beim schreiben der Default Settings")
                 code, configuration = shared.lora.get_configuration()
-                if not shared.ADDH == configuration.ADDH: raise Exception("ADDH wurde nicht geschrieben")
-                if not shared.ADDL == configuration.ADDL: raise Exception("ADDL wurde nicht geschrieben")
+                if not int(shared.ADDH) == configuration.ADDH: raise Exception("ADDH wurde nicht geschrieben")
+                if not int(shared.ADDL) == configuration.ADDL: raise Exception("ADDL wurde nicht geschrieben")
                 if "Funksystem konnte nicht gestartet werden, Funk deaktiviert" in shared.fehler:
                     shared.fehler = shared.fehler.replace("Funksystem konnte nicht gestartet werden, Funk deaktiviert", "")
                 shared.manager_check = 0
@@ -445,6 +524,7 @@ def manager2():
         if shared.manager_check == 0:
             shared.thread_wait = False
             count = count + 1
+
             message, server_id = empfang_normal(shared.myid)
             print(f"mes:{message}, ser:{server_id}, manager2")
             if not message == "404" or None:check_connection.auswertung(message, server_id)
@@ -473,7 +553,6 @@ def save_all():
     if not os.path.exists(f"{shared.main_path}variablen.pkl"):
         with open(f"{shared.main_path}variablen.pkl", "wb") as f:
             pickle.dump({}, f)
-
     with open(f"{shared.main_path}variablen.pkl", "rb") as f:
         data = pickle.load(f)
     if not shared.ADDH == -10:data["ADDH"] = shared.ADDH
@@ -482,6 +561,8 @@ def save_all():
     if not shared.current_power == -10:data["current_power"] = shared.current_power
     data["skalas"] = shared.skalas
     data["sensors"] = shared.sensors
+    data["kontakte2"] = shared.kontakte2
+    data["chats"] = shared.chats
     with open(f"{shared.main_path}variablen.pkl", "wb") as f:
         pickle.dump(data, f)
     print("Alles wichtige wurde gespeichert")
@@ -493,13 +574,35 @@ def load_file():
         print(f"name:{name}: wert:{wert}")
         setattr(shared, name, wert)
 
+def initalize_chats():
+    print("initalizing chats")
+    with open(f'{shared.main_path}kontakt.csv', "r") as f:
+        for line in f:
+            line = line.strip()
+            parts = line.split(",", 1)
+            name = parts[0]
+            print("Name:", name)
+            if not any(name == eintrag[0] for eintrag in shared.kontakte2):
+                shared.kontakte2.append((name, "", ""))
+                shared.chats[name] = []
+
+
 if __name__ == '__main__':
+    shared.main_path = f"{os.getcwd()}/"
+    print(os.getcwd())
     if os.path.exists(f'{shared.main_path}variablen.pkl'):load_file()
-    init_hardware()
     if os.path.exists(f'{shared.main_path}kontakt.csv'):
+         print("Kontakte werden geladen")
          with open(f"{shared.main_path}kontakt.csv", "r", encoding="utf-8") as f: shared.kontakte = list(csv.reader(f))
          print(shared.kontakte)
          for eintrag in shared.kontakte:
-             if len(eintrag) > 2: shared.optionen[eintrag[0]] = eintrag[len(eintrag) // 2]
+             if len(eintrag) > 2:
+                 if eintrag[0].strip().lower() == shared.myname.lower():
+                     shared.ADDH, shared.ADDL = eintrag[1].split(":")
+                     print(f"name wurde erkannt und gespeichert:{shared.ADDH}:{shared.ADDL}")
+                 print(eintrag)
+                 shared.optionen[eintrag[0]] = eintrag[len(eintrag) // 2]
+         initalize_chats()
+    init_hardware()
     #logging.getLogger('werkzeug').disabled = True
     app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
