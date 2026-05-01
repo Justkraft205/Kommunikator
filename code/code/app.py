@@ -60,7 +60,7 @@ def messenger():
             shared.kontakte2[i] = (name, letzte_nachricht, datum)
     nachrichten_chat = shared.chats.get(kontakt, [])
     return render_template(
-        "message_neu.html",
+        "message.html",
         zeilen_chat=nachrichten_chat,
         zeilen_links=shared.kontakte2,
         aktiver_chat=kontakt,
