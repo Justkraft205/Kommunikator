@@ -1,3 +1,8 @@
+#Gerät Spezifische Informationen----------------------------------------------------------------------------------------
+myname = "Pi2"
+myid = "7979173"
+serial_number = "088713"
+main_path = "/home/pi/Desktop/code/code/"
 # Lora:-----------------------------------------------------------------------------------------------------------------
 M1_PIN = 23
 M0_PIN = 24
@@ -44,26 +49,19 @@ notify = False
 notify2 = False
 hoehe = "??"
 state = True
-myid = "7979173"
-myname = "Pi2"
 ser = None
 cords =""
 server_id = ""
-serial_number = "088713"
 manager_check = 0
 time_data = None
 test = None
-thread_wait = False
+thread_wait = True
 file_name = None
-
 # I guess can weg
 temp_c = 0
 temp_f = 0
 shared_data = {"status56": "init2", "message": "","message2": "", "wetterdaten": wetterdaten, "funk":0,"timeout":0}
-status = {
-    'label1': 'Bereit',
-    'label2': 'Bereit',
-    'label3': 'Bereit'
-}
 celsius = True
-main_path = "/home/pi/code/"
+# für messenger:
+kontakte2 = []
+chats = {}
