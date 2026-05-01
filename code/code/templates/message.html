@@ -1,119 +1,217 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <title>Messenger</title>
-  <style>
-    table {
-      border-collapse: collapse;
-      width: 60%;
-      margin: 40px auto;
-      font-family: Arial, sans-serif;
-    }
-    th, td {
-      border: 1px solid #aaa;
-      padding: 8px 12px;
-      text-align: left;
-    }
+<meta charset="UTF-8">
+<title>Messenger</title>
+
+<style>
+
+/* =======================
+   GLOBAL
+======================= */
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f5f5f5;
+    overflow: hidden;
+}
+.msg-button {
+    all: unset;
+    background: #daf5d7;
+     border-radius: 10px;
+    cursor: pointer;
+    display: block;
+}
+/* =======================
+   HEADER (klein + clean)
+======================= */
+header {
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    background: white;
+    border-bottom: 1px solid #ccc;
+}
+
+/* =======================
+   LAYOUT (2 SPALTEN)
+======================= */
+.layout {
+    display: flex;
+    height: calc(100vh - 35px);
+}
+
+/* LINKS */
+.left {
+    width: 300px;
+    border-right: 2px solid black;
+    padding: 10px;
+    overflow-y: auto;
+    background: #daf5d7;
+}
             .disabled-btn {
     background-color: red !important;
     cursor: not-allowed;
     opacity: 0.6;
 }
-    th {
-      background-color: #f2f2f2;
-    }
-    tr:nth-child(even) {
-      background-color: #f9f9f9;
-    }
-  </style>
+
+/* RECHTS */
+.right {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+}
+
+/* =======================
+   CHAT BOXES
+======================= */
+.chat, .chat2 {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 120px; /* wichtig für input overlap */
+}
+
+/* =======================
+   BUBBLES
+======================= */
+.message {
+    max-width: 75%;
+    min-width: 120px;
+    padding: 10px 15px;
+    border-radius: 10px;
+    background: #e0e0e0;
+    word-wrap: break-word;
+    align-self: flex-start;
+}
+
+.message.Ich {
+    background: #dcf8c6;
+    align-self: flex-end;
+}
+
+/* links bubbles */
+.message2 {
+    padding: 10px 100px;
+    border-radius: 0 10px 20px 0;
+    background: #e0e0e0;
+}
+.message2.active {
+    background: #bde0ff; /* deutlich sichtbar */
+}
+
+/* =======================
+   INPUT BAR
+======================= */
+.send_button {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    display: flex;
+    gap: 10px;
+    padding: 10px;
+    background: white;
+    border-top: 1px solid #ccc;
+}
+
+.send_button input[type="text"] {
+    font-size: 18px;
+    padding: 6px;
+}
+
+.send_button select {
+    font-size: 18px;
+    padding: 6px;
+}
+
+.send_button button {
+    border: none;
+    background: none;
+    cursor: pointer;
+}
+
+</style>
 </head>
+
 <body>
-  <a href="{{ url_for('index') }}">Zurück</a>
-  <a href="{{ url_for('new_kontakt') }}">Neuer Kontakt</a>
-  <h2>Messenger</h2>
 
-  <form method="POST" action="/send_message">
-    <!-- Dropdown -->
-    <select name="optionen">
-      {% for eintrag in optionen %}
-        <option value="{{ eintrag }}" {% if auswahl == eintrag %}selected{% endif %}>
-          {{ eintrag }}
-        </option>
-      {% endfor %}
-    </select>
+<!-- =======================
+     HEADER
+======================= -->
+<header>
+    <h1>Messenger</h1>
+    <a href="{{ url_for('index') }}">Zurück</a>
+</header>
 
-    <!-- Eingabefeld für neuen Eintrag -->
+<!-- =======================
+     MAIN LAYOUT
+======================= -->
+<div class="layout">
+
+    <!-- LINKS -->
+    <div class="left">
+        <h3>Direkt Messages:</h3>
+
+        <div class="chat2">
+        {% for name, nachricht, datum in zeilen_links %}
+<form action="/load_messages" method="POST">
+    <button type="submit"
+            name="con_name"
+            value="{{ name }}"
+            class="msg-button"
+            {% if aktiver_chat == name %}style="background: lightblue;"{% endif %}>
+
+        <div class="message2 {% if aktiver_chat == name %}active{% endif %}">
+            <strong>{{ name }}</strong><br>
+            {{ nachricht }}<br>
+            <small>{{ datum }}</small>
+        </div>
+
+    </button>
+</form>
+        {% endfor %}
+        </div>
+    </div>
+
+    <!-- RECHTS -->
+    <div class="right">
+        <h3>Chat</h3>
+
+        <div class="right">
+    <div class="chat">
+
+    {% for name, nachricht, datum in zeilen_chat %}
+
+        <div class="message {% if name == 'Ich' %}Ich{% endif %}">
+            <strong>{{ name }}</strong><br>
+            {{ nachricht }}<br>
+            <small>{{ datum }}</small>
+        </div>
+
+    {% endfor %}
+
+    </div>
+</div>
+    </div>
+
+</div>
+
+<!-- =======================
+     INPUT BAR
+======================= -->
+<form class="send_button" method="POST" action="/send_message">
     <input type="text" name="neue_option" placeholder="Text">
 
-    <!-- Nur ein Button für alles -->
     <button type="submit"
         {% if freq == -10 %}
             class="disabled-btn" disabled
         {% endif %}>
-        Absenden
+        <img src="{{ url_for('static', filename='send_button.png') }}" width="90">
     </button>
-  </form>
 
-  {% if auswahl %}
-    <p>Ausgewählt: <strong>{{ auswahl }}</strong></p>
-  {% endif %}
+</form>
 
-  <!-- Nachricht erscheint nur, wenn variable 'status' den Wert '404' hat -->
-  {% if status == "404" %}
-    <p style="color: red; font-weight: bold;">
-      Fehler. Beim Senden
-    </p>
-  {% endif %}
-
-  <!-- Platz für dynamische Server-Nachrichten -->
-  <div id="server-message" style="margin-top: 20px; color: blue; font-weight: bold;"></div>
-
-  <script>
-    async function checkServer() {
-      try {
-        const response = await fetch('/check_message');
-        if (!response.ok) throw new Error('Serverfehler');
-
-        const data = await response.json();
-
-        // Textnachricht aktualisieren
-        document.getElementById('server-message').innerText = data.nachricht;
-
-        // Tabelleninhalt aktualisieren
-        document.querySelector('table tbody').innerHTML = data.tabelle;
-
-      } catch (err) {
-        console.error('Fehler beim Abrufen:', err);
-      }
-    }
-
-    // Alle 5 Sekunden prüfen und Tabelle + Nachricht aktualisieren
-    setInterval(checkServer, 5000);
-
-    // Direkt beim Laden einmal prüfen
-    checkServer();
-  </script>
-
-  <!-- 🔽 Tabelle am Ende der Seite -->
-  <h3 style="text-align:center; margin-top:50px;">Gespeicherte Nachrichten</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Nachricht</th>
-        <th>Datum</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for name, nachricht, datum in zeilen %}
-      <tr>
-        <td>{{ name }}</td>
-        <td>{{ nachricht }}</td>
-        <td>{{ datum }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
 </body>
 </html>
