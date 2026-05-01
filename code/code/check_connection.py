@@ -123,15 +123,19 @@ def save_kontakt(name, nummer, addh, addl):
 
 def finde_ersten_wert(datei, zid):
     with open(datei, "r", encoding="utf-8") as f:kontakte = list(csv.reader(f))
-    if ";" in zid:spalte = 1
+    if ":" in zid:spalte = 1
     else:spalte = 2
     for eintrag in kontakte:
+        print(eintrag)
         if len(eintrag) == 3:
             print(eintrag[spalte])
-            if eintrag[spalte] == zid:return eintrag[0]
+            if eintrag[spalte] == zid:
+                print(f"einrag0:{eintrag[0]}")
+                return eintrag[0]
     return None
 
 def speichern(id3, nachricht, datei):
+    print(f"id3: {id3}, nachricht: {nachricht}, datei: {datei}")
     name = finde_ersten_wert("kontakt.csv", id3)
     if not name: name = "Unbekannt"
     if os.path.exists(datei):
@@ -145,6 +149,7 @@ def speichern(id3, nachricht, datei):
     with open(datei, "w", encoding="utf-8") as f:
         json.dump(daten, f, indent=4, ensure_ascii=False)
     print(f"Nachricht gespeichert mit ID {naechste_id}")
+    shared.chats[name].append((name, nachricht, datum_str))
     shared.send = name
     shared.notify = True
     shared.notify2 = True
@@ -196,6 +201,7 @@ def server_anfrage(s_id, number):
     return message, server_id
 
 def mes_senden(option, text):
+    print(shared.fehler2)
     if "1" in shared.fehler2:return False
     shared.manager_check = 2
     c = 0
@@ -399,7 +405,7 @@ def sensor_logger(file_name):
     check_sensoren()
     if logger_counter == 1:
         header = shared.header + ["Uhrzeit"]
-        with open(f"logings/{file_name}", "w", newline="", encoding="utf-8") as f:
+        with open(f"{shared.main_path}logings/{file_name}", "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(header)
     print("logger hat als rückgabe:", shared.sensor_data)
@@ -408,7 +414,7 @@ def sensor_logger(file_name):
         values.append(datetime.now().strftime("%H:%M"))
     else:
         values = list(shared.sensor_data)
-    with open(f"logings/{file_name}", "a", newline="", encoding="utf-8") as f:
+    with open(f"{shared.main_path}logings/{file_name}", "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, delimiter=";")
         writer.writerow(values)
     shared.sensor_data.clear()
