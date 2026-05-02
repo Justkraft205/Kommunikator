@@ -47,6 +47,9 @@ def messenger():
     global aktiver_chat
     kontakt = request.args.get("kontakt")
     print(f"ak: {aktiver_chat}")
+    if aktiver_chat == "Neuer_Kontakt":
+        aktiver_chat = ""
+        return redirect(url_for('new_kontakt'))
     for i, (name, text, datum) in enumerate(shared.kontakte2):
         if name == kontakt:
             if kontakt not in shared.chats:shared.chats[kontakt] = []
@@ -67,7 +70,6 @@ def messenger():
         freq=shared.current_freq
     )
 
-
 @app.route('/new_kontakt')
 def new_kontakt():return render_template('new_kontakt.html')
 
@@ -87,13 +89,6 @@ def terminal():
     start_ttyd()
     return render_template("terminal.html", battery_level=shared.battery_level)
 
-@app.route("/mesange", methods=["GET", "POST"])
-def mesange():
-    auswahl = wert = None
-    nachrichten = None
-    zeilen = []
-    return render_template("message.html",optionen=shared.optionen,auswahl=auswahl,status=shared.fehler,wert=wert,nachrichten=nachrichten,zeilen=zeilen, freq = shared.current_freq)
-
 @app.route('/sensoren')
 def sensoren():
     if shared.logger_data:
@@ -109,33 +104,6 @@ def sensoren():
                                logger_active=shared.logger_service, logger_data_check=shared.logger_data2, data = None)
 
 #Routen-----------------------------------------------------------------------------------------------------------------
-@app.route('/check_message2')
-def check_message2():
-    if os.path.exists(message_path):
-        with open(message_path, "r", encoding="utf-8") as fg:
-            datas = json.load(fg)
-    else:datas = {}
-    zeilen = []
-    for key, eintrag2 in datas.items():
-        if isinstance(eintrag2, dict):
-            zeilen.append((
-                eintrag2.get("name", "Unbekannt"),
-                eintrag2.get("nachricht", ""),
-                eintrag2.get("datum", "Unbekannt")
-            ))
-        else:
-            zeilen.append(("Unbekannt", str(eintrag2)))
-    nachricht = shared.nachricht
-    html_tabelle = render_template_string('''
-        {% for name, nachricht, datum in zeilen %}
-        <tr>
-          <td>{{ name }}</td>
-          <td>{{ nachricht }}</td>
-          <td>{{ datum }}</td>
-        </tr>
-        {% endfor %}
-    ''', zeilen=zeilen)
-    return jsonify({"nachricht": nachricht, "tabelle": html_tabelle})
 
 @app.route('/set_frequenz', methods=['POST'])
 def set_frequenz():
@@ -319,20 +287,6 @@ def funk_restart():
     start_funk()
     return redirect("/")
 
-@app.route("/send_message2", methods=["POST"])
-def send_message2():
-    shared.fehler = ""
-    option = request.form.get("optionen")
-    neue_option = request.form.get("neue_option")
-    if shared.ser == "404":
-        shared.fehler = 404
-    else:
-        status = mes_senden(option, neue_option)
-        if not status:
-            print(f"Hat nicht geklappt")
-            shared.fehler = 404
-    return redirect("/mesange")
-
 @app.route("/send_message", methods=["POST"])
 def send_message():
     global aktiver_chat
@@ -494,15 +448,12 @@ def start_funk():
             else:raise Exception("LoRa Init fehlgeschlagen")
         except Exception as e:
             print(e)
-
             try:
                 shared.ser.close()
                 print("wurde geschlossen")
             except:
                 pass
-
             time.sleep(1)
-
             if i == 3 - 1:
                 lora_fehler()
 
@@ -582,10 +533,10 @@ def initalize_chats():
             parts = line.split(",", 1)
             name = parts[0]
             print("Name:", name)
+            if not any(eintrag[0] == "Neuer_Kontakt" for eintrag in shared.kontakte2):shared.kontakte2.append(("Neuer_Kontakt", "", ""))
             if not any(name == eintrag[0] for eintrag in shared.kontakte2):
                 shared.kontakte2.append((name, "", ""))
                 shared.chats[name] = []
-
 
 if __name__ == '__main__':
     shared.main_path = f"{os.getcwd()}/"
